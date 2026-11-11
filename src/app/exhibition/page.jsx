@@ -17,19 +17,20 @@ export default function ExhibitionPage() {
 }
 
 function Exhibition() {
-  const { db, setExhibitPublic } = useStore();
+  const { db, setExhibitPublic, exhibitionSaving } = useStore();
   const ex = db.exhibition;
   const works = ex.dates.map((d) => db.artworks[d]).filter(Boolean);
   const [copied, setCopied] = useState(false);
 
   async function copy() {
-    if (!ex.id) return; // no exhibition row yet (sign-up trigger missing): nothing to link to
+    if (!ex.id) return;
     // Same URL the public viewer reads: /e/<exhibitions.id> -> GET /api/exhibitions/:id
     const url = `${location.origin}/e/${ex.id}`;
     try {
       await navigator.clipboard.writeText(url);
     } catch {
-      // Clipboard blocked: the label still confirms, user can copy from the preview page.
+      alert("링크를 복사하지 못했어요. 공개 전시 미리보기에서 주소를 복사해 주세요.");
+      return;
     }
     setCopied(true);
   }
@@ -56,6 +57,7 @@ function Exhibition() {
               role="switch"
               aria-checked={ex.isPublic}
               aria-label="전시 공개"
+              disabled={exhibitionSaving}
               className={ex.isPublic ? `${s.sw} ${s.swOn}` : s.sw}
               onClick={() => {
                 setExhibitPublic(!ex.isPublic);
@@ -84,7 +86,7 @@ function Exhibition() {
             {works.map((w, i) => (
               <figure key={w.date} className={s.work}>
                 <Link href={`/gallery/${w.date}`} className={s.workArt}>
-                  <Picture scene={w.scene} imageUrl={w.imageUrl} alt={w.summary} />
+                  <Picture scene={w.scene} imageUrl={w.imageUrl} imageError={w.imageError} alt={w.summary} />
                   <span className={s.no}>{i + 1}</span>
                 </Link>
                 <figcaption>
@@ -102,10 +104,10 @@ function Exhibition() {
           </div>
         </section>
 
-        <Link href={`/e/${ex.id}`} className={s.preview}>
+        {ex.id && <Link href={`/e/${ex.id}`} className={s.preview}>
           공개 전시 미리보기
           <IconNext />
-        </Link>
+        </Link>}
       </main>
       <BottomNav />
     </>

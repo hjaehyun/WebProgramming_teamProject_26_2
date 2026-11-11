@@ -1,6 +1,6 @@
 "use client";
 
-// Saves the day's picture as-is: the drawn image, or the example illustration (components/Art.jsx).
+// Saves the generated picture as-is.
 
 function save(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -14,7 +14,7 @@ function save(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/** Downloads an image URL (signed Storage URL or a /scenes file) under the given file name. */
+/** Downloads a generated image from its signed Storage URL. */
 export async function downloadImage(url, filename) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`download failed: ${res.status}`);

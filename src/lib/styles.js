@@ -8,6 +8,7 @@ export const STYLES = [
 ];
 
 export function styleOf(id) {
+  if (id === "gouache") return { id, label: "과슈", particle: "로" };
   return STYLES.find((s) => s.id === id) ?? STYLES[0];
 }
 

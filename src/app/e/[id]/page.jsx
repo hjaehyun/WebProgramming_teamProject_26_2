@@ -14,14 +14,16 @@ import s from "./public.module.css";
 // Public viewer: no sign-in needed. Data comes from GET /api/exhibitions/:id (public exhibitions only).
 export default function PublicExhibitPage() {
   const { id } = useParams();
+  return <PublicExhibit key={id} id={id} />;
+}
+
+function PublicExhibit({ id }) {
   const { authed, db } = useStore();
   const [load, setLoad] = useState({ state: "loading" });
   const [i, setI] = useState(0);
 
   useEffect(() => {
     let live = true;
-    setLoad({ state: "loading" });
-    setI(0);
     fetchPublicExhibition(id)
       .then((ex) => live && setLoad(ex ? { state: "ok", ex } : { state: "missing" }))
       .catch((err) => live && setLoad({ state: "error", message: err instanceof Error ? err.message : "불러오지 못했어요" }));

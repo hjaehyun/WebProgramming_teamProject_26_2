@@ -15,7 +15,7 @@ import { useState } from "react";
 import { isMockVideo } from "@/lib/mockSong";
 import s from "./SongCard.module.css";
 
-export default function SongCard({ song, readOnly, dark, busy, liked, note, onReroll, onLike, onRequest }) {
+export default function SongCard({ song, readOnly, dark, busy, liked, note, onReroll, onLike, onRequest, available = true }) {
   // Video id whose player was opened. A different song (다른 곡, next picture) starts closed again.
   const [opened, setOpened] = useState(null);
   if (!song && readOnly) return null;
@@ -25,8 +25,8 @@ export default function SongCard({ song, readOnly, dark, busy, liked, note, onRe
     return (
       <section className={cls} aria-label="오늘의 노래">
         <h2 className={s.h}>오늘의 노래</h2>
-        <p className={s.empty}>아직 노래가 없어요.</p>
-        <button className="btn ghost" onClick={onRequest} disabled={busy}>
+        <p className={s.empty}>{available ? "아직 노래가 없어요." : "노래 추천 연결 준비 중이에요."}</p>
+        <button className="btn ghost" onClick={onRequest} disabled={busy || !available}>
           {busy ? "찾는 중…" : "노래 추천받기"}
         </button>
       </section>

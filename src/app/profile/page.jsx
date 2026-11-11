@@ -21,7 +21,7 @@ export default function ProfilePage() {
 function Profile() {
   const router = useRouter();
   const params = useSearchParams();
-  const { db, ready, authed, error, setProfile, signOut } = useStore();
+  const { db, ready, authed, error, refresh, setProfile, signOut } = useStore();
   const [step, setStep] = useState("name");
 
   useEffect(() => {
@@ -29,17 +29,21 @@ function Profile() {
   }, [ready, authed, error, router]);
   const [nick, setNick] = useState("");
   const [picked, setPicked] = useState(null);
+  const [consent, setConsent] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   // Prefill when editing an existing profile. /profile?step=style (the my page's
   // style "바꾸기") opens straight on the style step.
   const [prefilled, setPrefilled] = useState(false);
   const [editing, setEditing] = useState(false);
-  if (ready && !prefilled) {
+  if (ready && authed && !error && !prefilled) {
     setPrefilled(true);
     if (db.profile) {
       setEditing(true);
       setNick(db.profile.nick);
       setPicked(db.profile.style);
+      setConsent(db.profile.consent);
       if (params.get("step") === "style") setStep("style");
     }
   }
@@ -54,12 +58,26 @@ function Profile() {
     setStep("style");
   }
 
-  function start() {
-    if (!picked) return;
-    setProfile({ nick: name, style: picked });
-    // First setup goes on to the how-to slides; an edit returns to the my page.
-    router.push(editing ? "/me" : "/guide");
+  async function start() {
+    if (!picked || saving) return;
+    setSaving(true); setSaveError(null);
+    try {
+      await setProfile({ nick: name, style: picked, consent });
+      // First setup goes on to the how-to slides; an edit returns to the my page.
+      router.push(editing ? "/me" : "/guide");
+    } catch (e) { setSaveError(e.message); }
+    finally { setSaving(false); }
   }
+
+  if (error) return (
+    <div className="app">
+      <div className="loading">
+        <p role="alert">{error}</p>
+        <button className="btn ghost" onClick={() => refresh()}>다시 불러오기</button>
+      </div>
+    </div>
+  );
+  if (!ready || !authed) return <div className="app"><div className="loading">불러오는 중…</div></div>;
 
   return (
     <div className="app">
@@ -82,8 +100,8 @@ function Profile() {
             <button
               className={s.logout}
               onClick={async () => {
-                await signOut();
-                router.replace("/");
+                try { await signOut(); router.replace("/"); }
+                catch (e) { setSaveError(e.message); }
               }}
             >
               로그아웃
@@ -193,12 +211,17 @@ function Profile() {
       </main>
 
       <div className="bar">
+        <div>
+          <label><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /> 조각글·작성 시각을 OpenAI로 보내 장면과 그림을 만드는 데 동의해요.</label>
+          <p><Link href="/privacy">전송 정보 확인</Link> · 동의하지 않아도 글은 저장할 수 있어요.</p>
+          {saveError && <p role="alert">{saveError}</p>}
+        </div>
         {step === "name" ? (
-          <button className="btn" onClick={next} disabled={!name}>
+          <button className="btn" onClick={next} disabled={!name || saving}>
             {editing ? "이름 저장하기" : "다음"}
           </button>
         ) : (
-          <button className="btn" onClick={start} disabled={!picked}>
+          <button className="btn" onClick={start} disabled={!picked || saving}>
             {picked ? withParticle(picked) + (editing ? " 저장하기" : " 시작하기") : "그림체를 골라주세요"}
           </button>
         )}

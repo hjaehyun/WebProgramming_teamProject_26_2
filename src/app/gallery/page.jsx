@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import Picture from "@/components/Picture";
 import { BottomNav, IconBack, IconNext, ProfileButton, Screen } from "@/components/ui";
-import { monthDay, toKey, todayKey, WEEKDAY_NAMES } from "@/lib/date";
+import { monthDay, toKey, todayKey, fromKey, WEEKDAY_NAMES } from "@/lib/date";
 import { sortedArtworks, useStore } from "@/lib/store";
 import s from "./gallery.module.css";
 
@@ -32,7 +32,7 @@ function buildMonth(db, year, month) {
 
 function Gallery() {
   const { db } = useStore();
-  const now = new Date();
+  const now = fromKey(todayKey());
   const works = sortedArtworks(db);
   const oldest = works.length ? works[works.length - 1].date : todayKey();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
@@ -79,8 +79,8 @@ function Gallery() {
             if (c.kind === "art")
               return (
                 <Link key={c.key} href={`/gallery/${c.key}`} className={s.tile} aria-label={`${monthDay(c.key)} 그림 보기`}>
-                  <Picture scene={db.artworks[c.key].scene} imageUrl={db.artworks[c.key].imageUrl} alt={db.artworks[c.key].summary} />
-                  <span className={s.dnum}>{c.day}</span>
+                  <Picture scene={db.artworks[c.key].scene} imageUrl={db.artworks[c.key].imageUrl} imageError={db.artworks[c.key].imageError} alt={db.artworks[c.key].summary} />
+                  <span className={s.dnum}>{c.day} {db.artworks[c.key].status === "failed" ? "· 실패" : db.artworks[c.key].status !== "ready" ? "· 생성 중" : ""}</span>
                 </Link>
               );
             if (c.kind === "today")
@@ -118,7 +118,7 @@ function Gallery() {
             {works.slice(0, 4).map((w) => (
               <Link key={w.date} href={`/gallery/${w.date}`} className={s.recentItem}>
                 <span className="art-frame">
-                  <Picture scene={w.scene} imageUrl={w.imageUrl} alt={w.summary} />
+                  <Picture scene={w.scene} imageUrl={w.imageUrl} imageError={w.imageError} alt={w.summary} />
                 </span>
                 <span className="hand">{monthDay(w.date)}</span>
               </Link>
