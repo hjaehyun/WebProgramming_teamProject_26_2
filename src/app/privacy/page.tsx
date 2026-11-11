@@ -14,7 +14,7 @@ export default function PrivacyPage() {
     <div className="app">
       <TopBar title="개인정보처리방침" back="/" />
       <main className={`scroll ${s.main}`}>
-        <p className={s.meta}>시행일 2026년 11월 10일</p>
+        <p className={s.meta}>시행일 2026년 11월 11일</p>
         <p>
           하루조각은 웹프로그래밍 수업 팀 프로젝트로 만든 그림일기 서비스예요. 서비스에 필요한 정보만 받고, 탈퇴하면 모두
           지워요.
@@ -84,8 +84,9 @@ export default function PrivacyPage() {
             <tr>
               <th>YouTube</th>
               <td>
-                AI가 쓴 노래 검색어(분위기 단어). 숫자·주소는 걸러내고, 이름·장소는 넣지 않도록 AI에 지시해요. 노래가
-                있는 화면을 열면 재생하지 않아도 YouTube 플레이어(쿠키를 줄인 주소)가 불려와요
+                AI가 쓴 노래 검색어(분위기 단어). 숫자·주소는 걸러내고, 이름·장소는 넣지 않도록 AI에 지시해요. 노래
+                카드에서 &lsquo;YouTube로 듣기&rsquo;를 누르면 그때 YouTube 플레이어(쿠키를 줄인 주소)가 열려요. 누르기
+                전에는 YouTube에 접속하지 않아요
               </td>
             </tr>
             <tr>
@@ -95,10 +96,6 @@ export default function PrivacyPage() {
             <tr>
               <th>Vercel</th>
               <td>서비스 운영(서버). 접속 기록(IP 주소 등)이 남을 수 있어요</td>
-            </tr>
-            <tr>
-              <th>Google Fonts</th>
-              <td>글꼴 내려받기. 화면을 열 때 브라우저가 Google 글꼴 서버에 접속해요(로그인하지 않아도)</td>
             </tr>
             <tr>
               <th>카카오, Google</th>

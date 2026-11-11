@@ -54,6 +54,9 @@
 3. `package.json`: 이름만 `haru-jogak-front`로 변경 (의존성은 원본과 같음).
 4. `.env.example`: Supabase 두 값만 남김.
 5. `docs/social-login-setup.md`: 원본은 `../docs/setup/`에 있음.
+6. `src/app/layout.tsx`, `src/app/globals.css` (2026-11-11): 글꼴을 Google Fonts `<link>` 대신 `next/font/google`로 직접 제공. 브라우저가 Google 글꼴 서버에 접속하지 않음.
+7. `src/components/SongCard.tsx`, `SongCard.module.css` (2026-11-11): YouTube 플레이어를 "YouTube로 듣기"를 누를 때만 불러옴.
+8. `src/app/privacy/page.tsx` (2026-11-11): 6·7번에 맞춰 Google Fonts 행 삭제, YouTube 문장 수정. **6~8번은 원본에 합칠 때 함께 가져가야 함**(방침이 6·7번 동작을 전제).
 
 원본으로 되돌려 합칠 때는 `src/app`, `src/components`, `src/lib`, `public`, `src/server/oauth*.ts`만 덮어쓰면 됩니다(`src/server/supabase.ts`·`auth.ts`는 원본 것을 유지). 2번 import는 그대로 둬도 동작합니다(`mockSong.ts`도 같이 복사).
 

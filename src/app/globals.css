@@ -14,8 +14,9 @@
   --accent-tint: #F1F3FC;
   --danger: #B3261E;
   --dark: #23222A;
-  --font-sans: 'Noto Sans KR', system-ui, sans-serif;
-  --font-hand: 'Gaegu', cursive;
+  /* --font-noto and --font-gaegu come from next/font in layout.tsx (self-hosted files) */
+  --font-sans: var(--font-noto), system-ui, sans-serif;
+  --font-hand: var(--font-gaegu), cursive;
 }
 
 * { box-sizing: border-box; }

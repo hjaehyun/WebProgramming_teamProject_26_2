@@ -1,6 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { Gaegu, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { StoreProvider } from "@/lib/store";
+
+// next/font downloads the font files at build time and serves them from this site, so a visitor's
+// browser never contacts Google's font servers. The privacy policy relies on this: do not add a
+// <link> to fonts.googleapis.com here. globals.css reads the two CSS variables below.
+const sans = Noto_Sans_KR({ subsets: ["latin"], display: "swap", variable: "--font-noto" });
+const hand = Gaegu({ weight: ["400", "700"], display: "swap", variable: "--font-gaegu", preload: false });
 
 export const metadata: Metadata = {
   title: "하루조각",
@@ -19,15 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap"
-        />
-      </head>
+    <html lang="ko" className={`${sans.variable} ${hand.variable}`}>
       <body>
         <StoreProvider>{children}</StoreProvider>
       </body>

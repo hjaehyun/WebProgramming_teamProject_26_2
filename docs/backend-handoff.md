@@ -83,9 +83,9 @@
 - 만 14세 미만 이용을 받을지 (지금 방침에 없음)
 - 개인정보 담당자를 누구로 적을지
 - 비공개 문의 창구(메일 등)를 둘지. 지금은 GitHub 이슈뿐이라 문의 내용이 공개됨
-- Google Fonts를 계속 외부에서 불러올지, 글꼴을 직접 넣을지 (프론트 작업, 정해지면 방침에서 해당 줄 삭제)
 
 ## 7. 배포 관련
 
 - 고친 방침·약관은 전체 앱 로컬 사본에도 넣어 두었지만, `hjaehyun/webTest`에 push하기 전이라 배포 사이트는 이전 문구입니다. 시행일은 2026-11-10으로 적혀 있어, push가 늦어지면 날짜를 맞춰야 합니다.
+- 2026-11-11 이 저장소에서 두 가지를 바꿨습니다. (1) 글꼴을 Google Fonts에서 불러오지 않고 직접 제공(`src/app/layout.tsx`, `globals.css`). (2) YouTube 플레이어는 노래 카드에서 "YouTube로 듣기"를 누를 때만 불러옴(`src/components/SongCard.tsx`, `SongCard.module.css`). 방침도 이에 맞춰 고쳤습니다(시행일 2026-11-11). 전체 앱에는 아직 없으니, 합칠 때 이 파일들과 `src/app/privacy/page.tsx`를 **함께** 가져가야 방침과 동작이 맞습니다. 백엔드 쪽에서 할 일은 없습니다.
 - 이 프론트 저장소를 따로 배포하게 되면 Supabase Authentication의 Redirect URLs에 `<배포 주소>/api/auth/callback`을 추가해야 소셜 로그인이 됩니다(지금 등록된 것은 `http://localhost:3000`과 기존 배포 주소).

@@ -64,6 +64,17 @@
 | B6 일부 | 8절: 이슈는 공개 게시판이니 개인 정보를 적지 말라는 안내 추가 |
 | C1 | 약관 3절: 외부 AI 전송은 개인정보처리방침을 따른다는 문장과 링크 추가 |
 
+## 코드로 없앤 것 (2026-11-11, `하루조각_front`)
+
+방침에 적어 두기만 했던 두 가지를 코드에서 없애고, 방침 문구도 다시 맞췄습니다(시행일 2026-11-11).
+
+| # | 코드 | 방침 | 확인 |
+|---|---|---|---|
+| A2 | `src/app/layout.tsx`: Google Fonts `<link>` 삭제, `next/font/google`로 글꼴 파일을 빌드 때 받아 이 사이트에서 직접 제공. `globals.css`는 `--font-noto`, `--font-gaegu` 변수 사용 | 3절 표에서 Google Fonts 행 삭제 | 빌드 결과에 `fonts.googleapis.com`·`fonts.gstatic.com` 주소 0건. 브라우저에서 `/`, `/privacy` 요청이 모두 자기 서버 |
+| A3 | `src/components/SongCard.tsx`: 처음에는 제목·채널과 "YouTube로 듣기" 버튼만 표시, 누르면 그때 플레이어(iframe) 추가. YouTube 썸네일도 쓰지 않음 | 3절 YouTube: "‘YouTube로 듣기’를 누르면 그때 플레이어가 열려요. 누르기 전에는 YouTube에 접속하지 않아요" | 누르기 전 iframe 0개·외부 요청 0건, 누른 뒤 `www.youtube-nocookie.com`만 요청 |
+
+전체 앱(`../haru-jogak`)에는 아직 넣지 않았습니다. 전체 앱은 코드와 방침 모두 이전 상태(Google Fonts 행 있음, 재생 전 로드)라 서로는 맞습니다.
+
 ## 남은 일
 
 1. A5(b) 그림 파일 삭제 실패 처리: 백엔드 코드(`src/server/db/images.ts`). 방침은 "바로 모두 지워요"라고 적혀 있으므로 코드가 따라와야 함 → 백엔드 담당에게 전달
