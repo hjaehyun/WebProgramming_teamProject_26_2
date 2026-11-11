@@ -66,15 +66,15 @@
 | F12 그리는 중 표시 | B20 자동 마감 cron | 자동 마감된 날이 `GET /api/me`에 어떤 상태(`drawing`/`done`/`failed`)로 오는지, 실패한 날을 사용자가 다시 시도할 수 있는지 |
 | F15 AI 한도 초과 문구 | B19 AI 사용 한도 | 지금처럼 `429` + `{ "error": "..." }` 유지. 화면은 `error` 문장을 그대로 보여 줌 |
 
-프론트가 부르는 API 전체 목록은 `README.md`의 "프론트가 부르는 API" 표, 요청·응답 타입은 `src/lib/types.ts`에 있습니다. 오류 응답은 모두 `{ "error": "사용자에게 보여 줄 문장" }` 형식을 전제로 합니다(`src/lib/store.tsx`의 `api()`).
+프론트가 부르는 API 전체 목록은 `README.md`의 "프론트가 부르는 API" 표, 요청·응답 데이터 모양은 `src/lib/types.js`(주석으로 적은 설명 문서, 전체 앱의 `src/lib/types.ts`와 같은 내용)에 있습니다. 오류 응답은 모두 `{ "error": "사용자에게 보여 줄 문장" }` 형식을 전제로 합니다(`src/lib/store.jsx`의 `api()`).
 
 ## 5. 이 저장소에 복사해 둔 백엔드 파일
 
 | 파일 | 상태 |
 |---|---|
-| `src/server/supabase.ts`, `src/server/auth.ts` | 소셜 로그인 라우트가 쓰는 공용 도우미. **원본을 그대로 복사한 것**이며 여기서는 고치지 않습니다. 원본이 바뀌면 알려 주세요 |
-| `src/lib/mockSong.ts` | 원본 `src/server/music/mock.ts`의 `isMockVideo` 한 줄을 옮긴 것. 모의 곡 id 앞글자 `MOCK_`를 바꾸면 알려 주세요 |
-| `src/app/api/auth/oauth/`, `src/app/api/auth/callback/`, `src/server/oauth.ts` | 소셜 로그인(B9). 프론트 담당이 맡은 작업이라 이 저장소에서 관리 |
+| `src/server/supabase.js`, `src/server/auth.js` | 소셜 로그인 라우트가 쓰는 공용 도우미. **원본 `.ts`에서 타입 표기만 지운 사본**이며 여기서는 동작을 고치지 않습니다. 원본이 바뀌면 알려 주세요 |
+| `src/lib/mockSong.js` | 원본 `src/server/music/mock.ts`의 `isMockVideo` 한 줄을 옮긴 것. 모의 곡 id 앞글자 `MOCK_`를 바꾸면 알려 주세요 |
+| `src/app/api/auth/oauth/`, `src/app/api/auth/callback/`, `src/server/oauth.js` | 소셜 로그인(B9). 프론트 담당이 맡은 작업이라 이 저장소에서 관리 |
 
 소셜 로그인에서 `accountInfo`를 쓰는 `GET /api/me`, `DELETE /api/me`는 백엔드 담당 코드라 여기 없습니다.
 
@@ -87,5 +87,8 @@
 ## 7. 배포 관련
 
 - 고친 방침·약관은 전체 앱 로컬 사본에도 넣어 두었지만, `hjaehyun/webTest`에 push하기 전이라 배포 사이트는 이전 문구입니다. 시행일은 2026-11-10으로 적혀 있어, push가 늦어지면 날짜를 맞춰야 합니다.
-- 2026-11-11 이 저장소에서 두 가지를 바꿨습니다. (1) 글꼴을 Google Fonts에서 불러오지 않고 직접 제공(`src/app/layout.tsx`, `globals.css`). (2) YouTube 플레이어는 노래 카드에서 "YouTube로 듣기"를 누를 때만 불러옴(`src/components/SongCard.tsx`, `SongCard.module.css`). 방침도 이에 맞춰 고쳤습니다(시행일 2026-11-11). 전체 앱에는 아직 없으니, 합칠 때 이 파일들과 `src/app/privacy/page.tsx`를 **함께** 가져가야 방침과 동작이 맞습니다. 백엔드 쪽에서 할 일은 없습니다.
+- 2026-11-11 이 저장소에서 두 가지를 바꿨습니다. (1) 글꼴을 Google Fonts에서 불러오지 않고 직접 제공(`src/app/layout.jsx`, `globals.css`). (2) YouTube 플레이어는 노래 카드에서 "YouTube로 듣기"를 누를 때만 불러옴(`src/components/SongCard.jsx`, `SongCard.module.css`). 방침도 이에 맞춰 고쳤습니다(시행일 2026-11-11). 전체 앱에는 아직 없으니, 합칠 때 이 파일들과 `src/app/privacy/page.jsx`를 **함께** 가져가야 방침과 동작이 맞습니다. 백엔드 쪽에서 할 일은 없습니다.
+- 2026-11-11 이 저장소의 코드를 **타입스크립트에서 자바스크립트로** 바꿨습니다(`.ts` → `.js`, `.tsx` → `.jsx`, 타입 표기만 삭제, 동작 같음). 전체 앱은 타입스크립트 그대로 두면 됩니다. 자세한 안내는 `docs/2026-11-11-javascript-conversion.md`. 알아 둘 것:
+  - 합치면 전체 앱은 화면(자바스크립트)과 서버(타입스크립트)가 섞입니다. 전체 앱 `tsconfig.json`이 `allowJs: true`라 빌드는 됩니다. 순서는 `README.md`의 "원본에 합칠 때".
+  - 전체 앱의 `src/lib/types.ts`는 서버 코드가 쓰므로 지우지 말아 주세요. 프론트는 더 이상 이 파일을 import하지 않습니다. 그래서 API 응답 모양을 바꿔도 프론트 쪽에서는 **타입 오류로 드러나지 않습니다**. 바꿀 때는 꼭 알려 주세요(이 저장소의 `src/lib/types.js` 설명도 같이 고칩니다).
 - 이 프론트 저장소를 따로 배포하게 되면 Supabase Authentication의 Redirect URLs에 `<배포 주소>/api/auth/callback`을 추가해야 소셜 로그인이 됩니다(지금 등록된 것은 `http://localhost:3000`과 기존 배포 주소).
