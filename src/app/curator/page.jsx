@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Art from "@/components/Art";
 import Picture from "@/components/Picture";
 import { Screen, TopBar } from "@/components/ui";
 import { curationStats, writeCuration } from "@/lib/ai";
-import { addDays, todayKey } from "@/lib/date";
+import { addDays, todayKey, fromKey } from "@/lib/date";
 import { sortedArtworks, useStore } from "@/lib/store";
+import { shareInflight } from "@/lib/inflight";
 import s from "./curator.module.css";
 
 export default function CuratorPage() {
@@ -20,7 +21,7 @@ export default function CuratorPage() {
 
 function range(p) {
   const today = todayKey();
-  const d = new Date();
+  const d = fromKey(today);
   if (p === "week") return { from: addDays(today, -6), label: "이번 주" };
   if (p === "month") return { from: today.slice(0, 8) + "01", label: `${d.getMonth() + 1}월` };
   const m = d.getMonth(); // seasons: 봄 3-5, 여름 6-8, 가을 9-11, 겨울 12-2
@@ -37,18 +38,19 @@ function Curator() {
   const [period, setPeriod] = useState("month");
   const periods = ["week", "month", "season"];
   const { from, label } = range(period);
-  const works = sortedArtworks(db).filter((w) => w.date >= from);
+  const works = sortedArtworks(db).filter((w) => w.date >= from && w.status === "ready");
   const enough = works.length >= MIN_WORKS;
   const c = enough ? curationStats(works) : null;
 
   // Commentary comes from the text AI; keyed by period + artwork set so stale replies are ignored.
-  const key = `${period}:${works.map((w) => w.date).join(",")}`;
+  const key = JSON.stringify([period, works.map(w => [w.date, w.requestId, w.summary, w.tags])]);
+  const requests = useRef(new Map());
   const [text, setText] = useState(null);
 
   useEffect(() => {
     if (!enough) return;
     let live = true;
-    writeCuration(works, curationStats(works), label)
+    shareInflight(requests.current, key, () => writeCuration(works, curationStats(works), label))
       .then((value) => live && setText({ key, value, error: null }))
       .catch((err) => live && setText({ key, value: null, error: err.message }));
     return () => {
@@ -84,7 +86,7 @@ function Curator() {
             <div className={s.thumbs}>
               {c.picks.map((d) => (
                 <Link key={d} href={`/gallery/${d}`} className="art-frame">
-                  <Picture scene={db.artworks[d].scene} imageUrl={db.artworks[d].imageUrl} alt={db.artworks[d].summary} />
+                  <Picture scene={db.artworks[d].scene} imageUrl={db.artworks[d].imageUrl} imageError={db.artworks[d].imageError} alt={db.artworks[d].summary} />
                 </Link>
               ))}
             </div>
@@ -118,7 +120,7 @@ function Curator() {
       </main>
       <div className="bar">
         <Link href="/exhibition/pick" className="btn">
-          이 해설로 전시 만들기
+          전시할 그림 고르기
         </Link>
       </div>
     </>

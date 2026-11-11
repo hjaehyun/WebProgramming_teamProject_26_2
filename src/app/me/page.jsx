@@ -60,8 +60,8 @@ function Me() {
   const ex = db.exhibition;
 
   async function logout() {
-    await signOut();
-    router.replace("/");
+    try { await signOut(); router.replace("/"); }
+    catch (e) { alert(e.message || "로그아웃하지 못했어요. 다시 시도해 주세요."); }
   }
 
   return (
@@ -69,6 +69,7 @@ function Me() {
       <TopBar title="마이페이지" back="/today" />
 
       <main className={`scroll ${s.main}`}>
+        {db.deletionPending && <p role="alert">탈퇴 정리가 아직 끝나지 않았어요. 아래 회원탈퇴에서 다시 시도하면 남은 파일 삭제를 이어서 처리해요.</p>}
         <section className={s.hero}>
           <span className={`hand ${s.avatar}`} aria-hidden="true">
             {profile.nick.charAt(0)}

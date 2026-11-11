@@ -1,36 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
+import { finishAuthentication } from "@/lib/auth-flow";
 import s from "./login.module.css";
 
 const LOGO = ["#C9D3F2", "#F3D9A8", "#D6E6D2", "#F0CFC6", null, "#DCD3EE"];
 
-// Shown when the OAuth callback sends us back with ?error= (the provider's own text is never shown).
-const OAUTH_ERRORS = {
+// Authentication callbacks return fixed messages, never the provider's own text.
+const AUTH_ERRORS = {
   oauth: "로그인하지 못했어요. 잠시 후 다시 해주세요",
   linked: "이미 이메일로 가입한 주소예요. 이메일로 로그인해 주세요",
+  confirmation: "인증 링크가 만료되었거나 사용할 수 없어요. 이미 인증했다면 로그인해 주세요.",
 };
 
 export default function LoginPage() {
+  return <Suspense fallback={<div className="app" />}><LoginForm /></Suspense>;
+}
+
+function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const { ready, authed, db, signIn, signUp } = useStore();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
+  const [confirmationSent, setConfirmationSent] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const linkMessage = params.get("password") === "updated" ? "비밀번호를 바꿨어요. 새 비밀번호로 로그인해 주세요." : params.get("error") ? AUTH_ERRORS[params.get("error")] ?? AUTH_ERRORS.oauth : null;
+  const shownMessage = message || (!dismissed && linkMessage);
   const signup = mode === "signup";
-
-  // Back from a failed social login: show why, then drop ?error from the address bar.
-  useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("error");
-    if (!code) return;
-    setMessage(OAUTH_ERRORS[code] ?? OAUTH_ERRORS.oauth);
-    window.history.replaceState(null, "", "/");
-  }, []);
 
   // Already signed in (e.g. coming back later): skip the form.
   useEffect(() => {
@@ -39,6 +42,7 @@ export default function LoginPage() {
 
   async function onSubmit(e) {
     e.preventDefault();
+    setDismissed(true);
     if (busy) return;
     if (signup && password.length < 8) {
       setMessage("비밀번호는 8자 이상이어야 해요");
@@ -46,9 +50,13 @@ export default function LoginPage() {
     }
     setBusy(true);
     setMessage(null);
+    setConfirmationSent(false);
     try {
-      const next = await (signup ? signUp(email, password) : signIn(email, password));
-      router.push(next.profile ? "/today" : "/profile");
+      await finishAuthentication(
+        signup ? signUp(email, password) : signIn(email, password),
+        () => { setConfirmationSent(true); setPassword(""); setBusy(false); },
+        path => router.push(path),
+      );
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "잠시 후 다시 해주세요");
       setBusy(false);
@@ -56,8 +64,11 @@ export default function LoginPage() {
   }
 
   function switchMode() {
+    if (busy) return;
     setMode(signup ? "login" : "signup");
     setMessage(null);
+    setConfirmationSent(false);
+    setDismissed(true);
   }
 
   return (
@@ -89,7 +100,7 @@ export default function LoginPage() {
               autoComplete="email"
               required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setConfirmationSent(false); }}
             />
           </label>
           <label className="field">
@@ -102,19 +113,24 @@ export default function LoginPage() {
               required
               minLength={signup ? 8 : undefined}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); setConfirmationSent(false); }}
             />
           </label>
-          {message && (
+          {!signup && <Link href="/forgot-password">비밀번호를 잊으셨나요?</Link>}
+          {confirmationSent && (
+            <p className={s.success} role="status">
+              인증 메일을 확인해 주세요. 가입 가능한 주소라면 메일을 보냈어요. 이미 가입했다면 로그인해 주세요.
+            </p>
+          )}
+          {shownMessage && (
             <p className={s.error} role="alert">
-              {message}
+              {shownMessage}
             </p>
           )}
           {signup && (
             <p className={s.notice}>
-              조각글은 장면 정리를 위해 Google Gemini로, 그림 설명은 그림을 그리기 위해 Cloudflare Workers AI로 전송돼요. 무료
-              등급에서는 서비스 개선에 쓰일 수 있으니, 이름이나 연락처는 적지 말아 주세요. 위치를 허용하면 그날 날씨 확인에만
-              쓰고 저장하지 않아요.
+              프로필에서 AI 전송에 동의하면 조각글과 작성 시각을 OpenAI로 보내 장면을 정리하고 그림을 만들어요.
+              자세한 내용은 개인정보처리방침에서 확인해 주세요.
             </p>
           )}
           <button className="btn" type="submit" style={{ marginTop: 8 }} disabled={busy}>
@@ -136,7 +152,7 @@ export default function LoginPage() {
           </a>
           <div className={s.signup}>
             {signup ? "이미 계정이 있나요?" : "처음이신가요?"}
-            <button type="button" onClick={switchMode}>
+            <button type="button" onClick={switchMode} disabled={busy}>
               {signup ? "로그인" : "회원가입"}
             </button>
           </div>

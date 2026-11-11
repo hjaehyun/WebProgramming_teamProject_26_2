@@ -12,7 +12,7 @@ export function fromKey(key) {
 }
 
 export function todayKey() {
-  return toKey(new Date());
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
 export function addDays(key, n) {
@@ -38,9 +38,10 @@ export function longDate(key) {
 
 /** { am: true, label: "9:12" } */
 export function clock(iso) {
-  const d = new Date(iso);
-  const h = d.getHours();
-  return { am: h < 12, label: `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}` };
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(iso));
+  const h = Number(parts.find(p => p.type === "hour").value);
+  const minute = parts.find(p => p.type === "minute").value;
+  return { am: h < 12, label: `${h % 12 || 12}:${minute}` };
 }
 
 export const WEEKDAY_NAMES = WEEKDAYS;

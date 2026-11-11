@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Picture from "@/components/Picture";
 import { BottomNav, ProfileButton, Screen } from "@/components/ui";
-import { drawScene, summarizeDay } from "@/lib/ai";
+import { generateArtwork } from "@/lib/ai";
 import { clock, longDate, monthDay, todayKey, weekdayName } from "@/lib/date";
 import { byTime, useStore } from "@/lib/store";
 import { withParticle } from "@/lib/styles";
@@ -20,14 +20,15 @@ export default function TodayPage() {
   );
 }
 
-// `stage` below: 0 writing, 1 summarizing, 2 drawing, 3 done
+// Stage reflects the saved server job, including after refresh or automatic close.
 function Today() {
-  const { db, addEntry, editEntry, removeEntry, saveArtwork, flushEntries } = useStore();
+  const { db, addEntry, editEntry, removeEntry, applyArtwork, flushEntries, refresh } = useStore();
   const date = todayKey();
   const art = db.artworks[date];
   const style = db.profile.style;
 
-  const [stage, setStage] = useState(art ? 3 : 0);
+  const [requesting, setRequesting] = useState(false);
+  const stage = art?.status === "ready" ? 3 : art?.status === "failed" ? 4 : art ? (art.phase === "drawing" ? 2 : 1) : requesting ? 1 : 0;
   const [draft, setDraft] = useState("");
   const [hint, setHint] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -83,27 +84,24 @@ function Today() {
   }
 
   async function close() {
+    if (requesting) return;
     if (editingId) cancelEdit();
     setOpenId(null);
-    setStage(1);
+    setRequesting(true);
     try {
       await flushEntries(); // fragments still waiting for the location must reach the server before closing
-      const summary = await summarizeDay(entries);
-      setStage(2);
-      const { scene, imagePath, imageUrl } = await drawScene(summary, style, date);
-      saveArtwork({ date, scene, style, summary: summary.summary, tags: summary.tags, mood: summary.mood, songQuery: summary.songQuery, summarySource: summary.source, imagePath, imageUrl, entries });
-      setStage(3);
+      await generateArtwork(date, false, applyArtwork);
     } catch (err) {
-      // Entries stay as drafts, so the user can simply try closing again.
-      setStage(0);
       alert(err instanceof Error ? err.message : "그림을 그리지 못했어요");
+    } finally {
+      await refresh();
+      setRequesting(false);
     }
   }
 
   const pieces = Array.from({ length: Math.min(8, Math.max(6, n)) }, (_, i) => i < n);
   const steps = [`조각글 ${n}개 모으기`, "한 장면으로 정리하기", `${withParticle(style)} 그리기`];
 
-  let lastAm = null;
 
   return (
     <>
@@ -141,10 +139,9 @@ function Today() {
           </div>
         )}
 
-        {entries.map((e) => {
+        {entries.map((e, index) => {
           const t = clock(e.at);
-          const showDivider = t.am !== lastAm;
-          lastAm = t.am;
+          const showDivider = index === 0 || t.am !== clock(entries[index - 1].at).am;
           const open = openId === e.id && stage === 0;
           const editing = editingId === e.id;
           return (
@@ -197,12 +194,17 @@ function Today() {
         {stage === 3 && art && (
           <Link href={`/gallery/${date}`} className={`${s.result} reveal`}>
             <span className={s.resultArt}>
-              <Picture scene={art.scene} imageUrl={art.imageUrl} alt={art.summary} />
+              <Picture scene={art.scene} imageUrl={art.imageUrl} imageError={art.imageError} alt={art.summary} />
             </span>
             <span className={s.resultText}>
               <strong>오늘의 그림이 완성됐어요</strong>
               <span>자세히 보기</span>
             </span>
+          </Link>
+        )}
+        {stage === 4 && art && (
+          <Link href={`/gallery/${date}`} className={s.result}>
+            <span className={s.resultText}><strong>그림을 완성하지 못했어요</strong><span>상태 확인하고 다시 시도하기</span></span>
           </Link>
         )}
       </main>

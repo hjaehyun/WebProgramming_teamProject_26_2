@@ -1,144 +1,82 @@
-# 하루조각_front
+# 하루조각 — 프론트엔드·백엔드 통합
 
-하루조각(`haru-jogak/`)에서 **프론트 담당 범위만** 떼어낸 Next.js 프로젝트입니다.
-기준: Google Sheets "하루조각 간트 차트"에서 프론트 담당자가 맡은 작업. `[프론트]` F1~F24 + 백엔드 중 B9(소셜 로그인), B22(개인정보처리방침 내용 검토).
+조원이 만든 화면에 기존 하루조각의 Supabase DB·인증·GPT 그림 생성·자동 작업 처리를 연결한 프로젝트입니다. 프론트엔드 기준은 이 저장소의 `6155d3a`, 작업 브랜치는 `codex/backend-integration`입니다. 화면은 JavaScript/JSX를 유지하고 서버는 TypeScript로 구성했으며, Next.js `16.4.5`를 사용합니다.
 
-- 추출일: 2026-11-10, 원본: 전체 앱 `haru-jogak` (저장소 `hjaehyun/webTest`, main `db9decf` 이후 로컬 상태). 이 문서의 `../haru-jogak/` 경로는 그 전체 앱을 가리킵니다.
-- 백엔드에 전달할 내용: `docs/backend-handoff.md`, 방침·약관 검토 기록: `docs/2026-11-10-privacy-review.md`
-- 언어: **자바스크립트**(`.js`, `.jsx`). 2026-11-11에 타입스크립트에서 바꿨습니다. 원본 전체 앱은 타입스크립트 그대로입니다. **팀원 안내: [`docs/2026-11-11-javascript-conversion.md`](docs/2026-11-11-javascript-conversion.md)** (바뀐 것, 각자 할 일, 주의할 점).
-- 백엔드 코드는 소셜 로그인(B9)만 들어 있습니다. 화면은 나머지 `/api/*`를 그대로 호출하므로 **백엔드 없이 실행하면 로그인 이후 화면은 동작하지 않습니다.**
+**새 통합 UI와 작업 처리기를 기존 [하루조각 운영 주소](https://harujogak-hihellow18.vercel.app)에 배포했습니다.** 2026-11-11 20:10:56(KST)에 최초 통합 배포가 READY가 되었고, 운영 로그인 화면·접근 제한·인증된 빈 작업 호출을 확인했습니다. 이후 Gmail SMTP로 전환하고 가입 성공 안내 수정본도 20:59:45(KST)에 운영 배포했습니다. 발신 계정과 다른 사용자 소유 주소에서 가입 메일 수신·이메일 인증·비밀번호 로그인을 완료했고, 새 계정의 빈 오늘·마이페이지 화면도 확인했습니다. [SMTP 설정·검증 기록](docs/gmail-smtp-verification-2026-11-11.md)을 참고하세요.
 
-## 들어 있는 것
+배포 전 로컬에서는 조각글 저장·GPT 수채화 생성까지 확인했고, 운영에서는 크레파스 재생성·갤러리 새로고침을 확인했습니다. 이후 새 계정으로 합성 조각글 2개를 실제 저장하고, 날짜를 조정한 시험 자료로 자연 Cron의 동화책 그림 생성과 오래된 처리 작업의 재선점·완료까지 검증했습니다. 실제 자정 통과나 프로세스 강제 종료 시험은 아닙니다. [운영 흐름 검증](docs/production-flow-verification-2026-11-11.md)과 [자동 작업 검증](docs/automatic-worker-verification-2026-11-11.md)에 범위를 구분했습니다.
 
-| 경로 | 내용 |
+| 범위 | 현재 상태 |
 |---|---|
-| `src/app/**/page.jsx`, `*.module.css` | 화면 (아래 표) |
-| `src/app/layout.jsx`, `globals.css` | 공통 틀, PC 폰 프레임 |
-| `src/components/` | `ui.jsx`, `Picture.jsx`, `Art.jsx`, `SongCard.jsx` |
-| `src/lib/` | `store.jsx`(상태 + API 호출), `ai.js`, `types.js`(데이터 모양 설명, 코드 없음), `date.js`, `geo.js`, `download.js`, `exhibitions.js`, `inflight.js`, `styles.js`, `seed.js`(미사용) |
-| `public/scenes/` | 예시 그림 6장 |
-
-### 소셜 로그인 (B9)
-
-| 경로 | 내용 |
-|---|---|
-| `src/app/api/auth/oauth/[provider]/route.js` | `GET /api/auth/oauth/kakao\|google` → 제공자 로그인 화면으로 302 |
-| `src/app/api/auth/callback/route.js` | `GET /api/auth/callback?code=` → 세션 쿠키, 같은 이메일 자동 연결 거부(`/?error=linked`) |
-| `src/server/oauth.js`, `oauth.test.js` | 규칙(제공자 목록, `safeNext`, `accountInfo`, `isLinkConflict`)과 시험 |
-| `src/server/supabase.js`, `src/server/auth.js` | 위 라우트가 쓰는 공용 도우미. **백엔드 소유(B5)**. 원본 `.ts`에서 타입 표기만 지운 사본이라 여기서 동작을 고치지 않기 |
-| `specs/haru-social-login.spl` | SPL 명세 (SPL Viewer code `haru-social-login`) |
-| `docs/social-login-setup.md` | 카카오·구글·Supabase 설정 안내 |
-| `.env.example` | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` (이 두 개만 필요) |
-
-소셜 로그인 관련 화면 쪽(F7)은 `src/app/page.jsx`(버튼, `?error=oauth|linked` 문구), `src/app/me/page.jsx`(비밀번호 변경 숨김, "탈퇴" 입력)입니다.
-원본에서 `accountInfo`를 쓰는 `GET/DELETE /api/me`(B7·B8)는 백엔드 담당이라 넣지 않았습니다.
-
-### 개인정보처리방침 (B22)
-
-따로 서버 코드는 없습니다. 검토 대상은 `src/app/privacy/page.jsx`(방침), `src/app/terms/page.jsx`(약관)이고 이미 들어 있습니다.
-방침 내용은 실제 동작(저장 컬럼, 외부 AI·API 호출, 탈퇴 시 삭제)과 맞아야 하므로, 검토할 때는 원본의 `../haru-jogak/supabase/schema.sql`, `../haru-jogak/.env.example`(외부 서비스 목록)과 대조하세요.
-
-## 뺀 것 (백엔드 담당)
-
-| 원본 경로 | 내용 |
-|---|---|
-| `src/app/api/` | 소셜 로그인 2개를 뺀 서버 API 라우트 전부 |
-| `src/server/` | DB 쿼리, AI, 노래, 날씨, 검증 등 (`oauth`, `supabase`, `auth`만 넣음) |
-| `src/middleware.ts` | CSRF 검사 (간트 B4) |
-| `supabase/`, `scripts/`, 나머지 `specs/` | 스키마, 시험 스크립트, SPL 명세 |
-| 나머지 환경변수 | AI, 노래, 날씨 키와 `SUPABASE_SECRET_KEY`(탈퇴 전용) |
-
-## 원본과 다른 점
-
-1. `src/lib/mockSong.js` 추가: 원본 `src/server/music/mock.ts`의 `isMockVideo` 한 줄을 옮김.
-2. `src/components/SongCard.jsx`: import 경로를 `@/server/music/mock` → `@/lib/mockSong`으로 변경.
-3. `package.json`: 이름만 `haru-jogak-front`로 변경 (의존성은 원본과 같음).
-4. `.env.example`: Supabase 두 값만 남김.
-5. `docs/social-login-setup.md`: 원본은 `../docs/setup/`에 있음.
-6. `src/app/layout.jsx`, `src/app/globals.css` (2026-11-11): 글꼴을 Google Fonts `<link>` 대신 `next/font/google`로 직접 제공. 브라우저가 Google 글꼴 서버에 접속하지 않음.
-7. `src/components/SongCard.jsx`, `SongCard.module.css` (2026-11-11): YouTube 플레이어를 "YouTube로 듣기"를 누를 때만 불러옴.
-8. `src/app/privacy/page.jsx` (2026-11-11): 6·7번에 맞춰 Google Fonts 행 삭제, YouTube 문장 수정. **6~8번은 원본에 합칠 때 함께 가져가야 함**(방침이 6·7번 동작을 전제).
-9. 자바스크립트로 변환 (2026-11-11): `src`의 `.ts` → `.js`, `.tsx` → `.jsx` (36개). 타입 표기만 지웠고 동작은 같음. `src/lib/types.ts`(타입 20개)는 `src/lib/types.js`(같은 내용을 주석으로 적은 설명 문서)로 대체. `tsconfig.json` → `jsconfig.json`, `next.config.ts` → `next.config.mjs`, `package.json`에서 `typescript`·`@types/*` 제거, `eslint.config.mjs`에서 `next/typescript` 제거.
-
-### 원본에 합칠 때
-
-원본(전체 앱)은 타입스크립트라서 그대로 덮어쓰면 같은 화면 파일이 둘(`page.tsx`와 `page.jsx`)이 됩니다. 순서:
-
-1. 원본에서 이 폴더에 있는 것과 짝이 되는 `.ts`/`.tsx` 파일을 지움: `src/app`의 화면(`page.tsx`, `layout.tsx`), `src/components/*.tsx`, `src/lib/*.ts(x)`, `src/server/oauth.ts`·`oauth.test.ts`, `src/app/api/auth/oauth`·`callback`의 `route.ts`.
-2. 지우지 않는 것: **`src/lib/types.ts`**(백엔드 코드가 타입을 가져다 씀), `src/server/supabase.ts`·`auth.ts`(원본 것을 유지), 나머지 `src/app/api`, `src/server`.
-3. 이 폴더의 `src/app`, `src/components`, `src/lib`(`types.js` 제외), `public`, `src/server/oauth*.js`를 복사.
-4. 원본의 `tsconfig.json`은 `allowJs: true`라 `.js`/`.jsx`를 섞어 써도 빌드됩니다. 원본의 시험 명령은 `.test.ts`만 돌리므로 `.test.js`도 돌리도록 고쳐야 합니다.
-
-2번 import(`@/lib/mockSong`)는 그대로 둬도 동작합니다(`mockSong.js`도 같이 복사).
-
-## 간트 작업과 파일
-
-| 작업 | 내용 | 파일 |
-|---|---|---|
-| F1 | 화면 설계 | (문서) |
-| F2 | 프로젝트 세팅, 폰 프레임 | `package.json`, `jsconfig.json`, `src/app/layout.jsx`, `src/app/globals.css` |
-| F3 | 로그인·회원가입 | `src/app/page.jsx`, `src/app/login.module.css` |
-| F4 | 프로필 (닉네임, 그림체 4종) | `src/app/profile/`, `src/lib/styles.js` |
-| F5 | 사용 가이드 | `src/app/guide/` |
-| F6 | 마이페이지 | `src/app/me/` |
-| F7 | 소셜 로그인 버튼·오류 문구·마이페이지 분기 | `src/app/page.jsx`, `src/app/me/page.jsx` |
-| F8 | 개인정보처리방침·약관 | `src/app/privacy/`, `src/app/terms/`, `src/app/legal.module.css` |
-| F9 | 조각글 피드 (쓰기·수정·삭제) | `src/app/today/`, `src/lib/store.jsx` |
-| F10 | 이미지 첨부 UI·미리보기 | **아직 없음** |
-| F11 | 위치 권한·좌표 반올림 | `src/lib/geo.js` |
-| F12 | 마감 버튼·그리는 중 표시 | `src/app/today/page.jsx`, `src/lib/ai.js` |
-| F13 | 그림 표시 컴포넌트 | `src/components/Picture.jsx`, `src/components/Art.jsx`, `public/scenes/` |
-| F14 | 다시 그리기 버튼 | `src/app/gallery/[date]/page.jsx` |
-| F15 | AI 한도 초과 문구 | `src/lib/ai.js`, `src/lib/store.jsx` (서버가 준 오류 문구 표시) |
-| F16 | 달력형 갤러리 | `src/app/gallery/` |
-| F17 | 그림 상세, 내려받기 | `src/app/gallery/[date]/`, `src/lib/download.js` |
-| F18 | 노래 카드 | `src/components/SongCard.jsx` |
-| F19 | 전시 그림 고르기 | `src/app/exhibition/pick/` |
-| F20 | 공개 전시 화면 | `src/app/e/[id]/`, `src/lib/exhibitions.js` |
-| F21 | 전시회 여러 개 | `src/app/exhibition/` (**현재 1개 고정**) |
-| F22 | 큐레이터 화면 | `src/app/curator/` |
-| F23~F24 | 화면 흐름 시험, 배포 확인 | (백엔드와 합친 뒤) |
-| B9 | 소셜 로그인 (카카오·구글 OAuth, 같은 이메일 거부) | `src/app/api/auth/oauth/`, `src/app/api/auth/callback/`, `src/server/oauth.js` |
-| B22 | 개인정보처리방침 내용 검토 | `src/app/privacy/page.jsx`, `src/app/terms/page.jsx` |
-
-## 프론트가 부르는 API (백엔드와의 약속)
-
-호출 위치는 `src/lib/store.jsx`, `src/lib/ai.js`, `src/lib/exhibitions.js`, `src/app/page.jsx` 네 곳뿐입니다. 요청·응답 데이터 모양은 `src/lib/types.js`에 주석으로 적혀 있습니다(백엔드 쪽 원본은 전체 앱의 `src/lib/types.ts`).
-
-| 메서드 | 경로 | 쓰는 곳 |
-|---|---|---|
-| POST | `/api/auth/signup`, `/api/auth/login`, `/api/auth/logout` | 로그인 화면, 마이페이지 |
-| GET (링크) | `/api/auth/oauth/kakao`, `/api/auth/oauth/google` | 소셜 로그인 버튼 (**이 폴더에 있음**) |
-| GET | `/api/auth/callback` | 제공자가 돌아오는 주소 (**이 폴더에 있음**) |
-| GET | `/api/me` | 앱 시작 시 전체 데이터 |
-| DELETE | `/api/me` | 탈퇴 |
-| PUT | `/api/me/password`, `/api/me/profile` | 마이페이지, 프로필 |
-| POST | `/api/me/entries` | 조각글 쓰기 |
-| PATCH, DELETE | `/api/me/entries/[id]` | 조각글 수정·삭제 |
-| POST | `/api/me/artworks` | 마감 후 그림 저장 |
-| POST | `/api/me/artworks/[date]/redraw` | 다시 그리기 |
-| POST | `/api/me/artworks/[date]/song` | 노래 추천·다른 곡 |
-| POST | `/api/me/songs/[id]/feedback` | 노래 좋아요 |
-| PATCH | `/api/me/exhibition` | 전시 그림·공개 여부 |
-| GET | `/api/exhibitions/[id]` | 공개 전시 |
-| POST | `/api/summarize`, `/api/draw`, `/api/curate` | 장면 정리, 그림, 큐레이터 |
+| 이메일 가입·로그인·로그아웃·비밀번호 재설정 | Gmail SMTP로 다른 주소 가입·수신·인증·비밀번호 로그인 확인. 새 SMTP의 복구 메일은 별도 검증 대상 |
+| 프로필·AI 전송 동의·계정 탈퇴 | 운영 임시 계정 2개의 실제 자기 탈퇴와 Auth·DB·Storage 정리 확인. Storage 장애는 모의 시험 |
+| 조각글 작성·수정·삭제 | 운영 UI 작성·수정·새로고침 유지, 임시 계정 API CRUD·계정 간 접근 차단 확인 |
+| GPT 그림 생성·다시 그리기·갤러리 | 로컬 수채화, 운영 크레파스·동화책·색연필 확인. 색연필 실제 PNG 다운로드 완료 |
+| 전시 선택·공개·큐레이터 | 운영 3장 GPT 해설·2장 공개 전시·순서·링크 복사·비공개 전환 후 기존 익명 링크 차단 확인 |
+| 예약 마감·중단 복구 | 과거 날짜 시험 자료의 자연 Cron 생성·활성 선점 보호·오래된 선점 복구 확인. 실제 프로세스 강제 종료 시험은 아님 |
+| 카카오·구글 로그인 | 화면·경로는 있으나 Supabase 제공자는 현재 비활성. 활성화·리디렉션·실제 로그인 확인 필요 |
+| 날씨·음악 | 다른 API 담당 조원의 후속 범위. 현재 기능 비활성화 |
 
 ## 실행
 
-```bash
-npm install
-```
+Node.js 22 이상을 사용합니다.
 
 ```bash
+npm ci
 npm run dev
 ```
 
-http://localhost:3000 에서 로그인 화면, `/privacy`, `/terms`는 보입니다. 그 밖의 화면은 `/api/me`가 없어 로그인 화면으로 돌아갑니다. 전체 동작은 `../haru-jogak/`에서 확인하세요.
+접속 주소는 **http://127.0.0.1:3001** 입니다. `APP_URL`과 브라우저 주소의 호스트·포트가 같아야 합니다. `localhost:3000`을 전제로 한 이전 안내는 이 통합본에 적용하지 않습니다.
 
-소셜 로그인:
+이 작업 폴더에는 기존 설정을 담은 `.env.local`을 복사해 두었습니다. 덮어쓰거나 Git에 올리지 마세요. 새로 클론한 팀원은 `.env.example`을 참고해 별도로 설정합니다. 서버 키는 브라우저 코드에 넣지 않습니다. 기존 운영 DB를 연결했다면 로컬 앱의 저장·삭제도 그 DB에 반영되므로, 실제 데이터 검증 전에 연결 대상을 확인해야 합니다.
 
-- `.env.local`에 `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`가 있어야 합니다(`.env.example` 참고). 없으면 버튼을 눌러도 `/?error=oauth`로 돌아옵니다.
-- Supabase Redirect URLs에 등록된 주소는 `http://localhost:3000/api/auth/callback`입니다. **3000번 포트로 실행**해야 로그인이 끝까지 됩니다(`../haru-jogak` 개발 서버와 동시에 켜지 않기).
-- 로그인에 성공해도 이 폴더에는 `/api/me`가 없어 다음 화면에서 로그인 화면으로 돌아옵니다. 세션 쿠키(`sb-*`)가 생겼는지로 확인하세요.
+현재 연결 DB에는 추가 마이그레이션을 적용했습니다. 로컬·운영에서 각각 확인한 범위와 남은 검증은 [통합 안내](docs/integration.md)를 확인하세요.
 
-시험: `npm test` (`geo`, `inflight`, `oauth` 순수 함수, Node 22 이상). 실행할 때 `MODULE_TYPELESS_PACKAGE_JSON` 경고가 나오지만 결과와 무관합니다.
+프로덕션 빌드를 로컬에서 확인할 때도 같은 포트를 사용합니다.
+
+```bash
+npm run build
+npm run start -- --hostname 127.0.0.1 --port 3001
+```
+
+## 검증
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+테스트에는 기존 생성 작업의 복구·소유권 검사, PGlite DB 제약, API 응답·복구 인증, 프론트의 비동기 저장·생성 흐름이 포함됩니다. 모의 응답과 로컬 DB 시험은 실제 SMTP·OAuth·OpenAI·운영 Cron 연결 검증을 대신하지 않습니다. 로컬 화면의 로그인·가입·재설정 진입과 비로그인 API의 접근 거부도 확인했으며, 남은 실제 서비스 검증은 [통합 안내](docs/integration.md)에 정리했습니다.
+
+후속 기능 검증에서는 운영 API 검사 53개와 임시 계정 정리, 색연필 생성·다운로드, GPT 큐레이터·공개 전시·비공개 전환을 확인했습니다. 최신 전체 로컬 테스트는 125개(Vitest 92·Node 33), lint·타입 검사·빌드를 통과했고 UI 수정본도 운영 배포했습니다. 실제 검증과 모의 장애 시험의 범위는 [추가 기능 검증](docs/remaining-features-verification-2026-11-11.md)에 구분했습니다.
+
+2026-11-11 기존 첫 계정으로 로컬 새 UI에서 합성 조각글 1개와 수채화 그림을 저장한 결과는 [로컬 실제 연결 검증](docs/live-verification-2026-11-11.md)에 기록했습니다. 이후 같은 계정의 운영 UI에서 11월 11일 그림을 크레파스로 한 번 다시 그렸고, 선점부터 약 17.4초에 완료했습니다. 새로고침 후에도 그림 3장·조각글 5개와 새 이미지가 유지됐으며, 이전 두 그림과 모든 조각글은 변경되지 않았습니다. **이 계정의 11월 11일 그림은 크레파스·시도 2회 상태로 남고, 프로필 기본 그림체는 수채화로 복원했습니다. 해당 날짜는 마감 상태이며 생성 시도는 1회 남았습니다.**
+
+## DB 적용 상태와 운영 전환
+
+- `supabase/migrations/20261111104704_team_frontend_integration.sql`을 적용했습니다. 원격 이력은 버전 `20261111104704`, 이름 `team_frontend_integration`이며 로컬 파일명도 맞췄습니다.
+- 적용 직후 기존 행 수(`profiles` 1, `entries` 4, `daily_artworks` 2, `exhibitions` 0)를 유지했고, 확장 컬럼 5개와 `ai_daily_usage`의 RLS·권한을 확인했습니다.
+- 초기 스키마는 이미 존재하지만 초기 파일은 원격 마이그레이션 이력에 등록되어 있지 않습니다. 추가 적용 전 원격 이력에는 작업 처리기 마이그레이션 2개만 있었습니다. 기존 파일을 재실행하거나 이력 확인 없이 `supabase db push`로 일괄 적용하지 마세요.
+- 새 개발용 Supabase DB는 기본 스키마인 `202611040001_initial.sql`과 이번 추가 파일을 적용하는 경로로 준비합니다. 두 자동 작업 설정 파일은 기존 운영 URL·Vault 비밀값을 전제로 하므로 새 DB에 일괄 실행하지 않습니다.
+- 기존 1분 Cron은 동일 운영 주소의 `/api/jobs`를 호출합니다. 배포 시 Cron SQL은 변경하지 않았습니다. 후속 시험에서 과거 날짜 기록의 자연 생성과 만료 선점 복구가 각각 실제 이미지·HTTP `200`/`ready`로 완료됐고, 마지막 tick은 활성·유휴 상태였습니다. 이 자동 작업 시험 직후 새 계정에는 조각글 2개·동화책 그림 2개가 있었고, 이후 색연필 검증을 더해 글 3개·그림 3개가 됐습니다. 일반 `failed` 작업은 자동 재시도하지 않습니다.
+- 인증 메일은 Supabase의 Gmail SMTP(`smtp.gmail.com:465`)로 전환했습니다. 가입·이메일 인증은 활성 상태이며 프로젝트 한도는 시간당 30통·동일 수신자 최소 60초 간격입니다. SMTP는 `.env`가 아니라 Supabase에 설정했고 기존 Resend 계정·키는 삭제하지 않았습니다. 새 수신자의 수신·인증은 확인했으며 비밀번호 복구와 OAuth 활성화는 별도로 남아 있습니다.
+
+## 코드와 협업 기준
+
+| 경로 | 역할 |
+|---|---|
+| `src/app/**/page.jsx`, `src/components/` | 조원 프론트 화면·컴포넌트 |
+| `src/lib/store.jsx`, `src/lib/ai.js` | 세션·저장 상태, 생성 요청·진행 상태 연결 |
+| `src/lib/types.js` | 현재 화면/API DTO 설명. 실행 코드나 DB 스키마가 아님 |
+| `src/app/api/`, `src/app/auth/`, `src/proxy.ts` | HTTP 경로, 인증 콜백, 세션 갱신 |
+| `src/server/*-handlers.ts`, `src/server/data.ts` | 프론트 계약에 맞춘 검증·응답 변환 |
+| `src/server/core/` | 기존 백엔드의 GPT 호출·작업 처리·Supabase 연결 |
+| `supabase/migrations/`, `tests/` | DB 확장과 자동 검증 |
+
+세부 API·DB 대응·후속 작업은 **[docs/integration.md](docs/integration.md)**와 **[src/lib/types.js](src/lib/types.js)**를 기준으로 확인합니다. 날씨는 별도 API 없이 `capabilities.weather=false`로 위치 수집·호출을 끄고, 음악의 두 POST 경로는 `501`을 반환합니다.
+
+`docs/backend-handoff.md`, `docs/2026-11-11-javascript-conversion.md`, `docs/social-login-setup.md`, 기존 개인정보 검토 기록과 `specs/`는 프론트 인수 및 실험 당시의 참고 자료입니다. 그 안의 `webTest`, `../haru-jogak`, 옛 API·스키마·3000번 포트 설명을 현재 구현으로 해석하지 마세요. 프론트 인수 당시 README는 Git의 `6155d3a:README.md`에서 확인할 수 있습니다.
+
+별도로 보관한 원본 백엔드는 보존하고, 이 저장소에서 통합을 진행합니다. 기존 운영 주소의 UI·worker는 이 통합본으로 교체했습니다. 조원의 `hjaehyun/webTest` 실험용 백엔드를 새 기준으로 교체하지 않았습니다.

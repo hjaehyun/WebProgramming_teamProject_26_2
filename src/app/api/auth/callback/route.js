@@ -10,6 +10,8 @@ export async function GET(req) {
   const origin = req.nextUrl.origin;
   const go = (path) => {
     const res = NextResponse.redirect(new URL(path, origin));
+    res.headers.set("Cache-Control", "private, no-store");
+    res.headers.set("Referrer-Policy", "no-referrer");
     res.cookies.delete({ name: NEXT_COOKIE, path: "/api/auth/callback" });
     return res;
   };
@@ -36,12 +38,12 @@ export async function GET(req) {
       return go("/?error=linked");
     }
 
-    const prof = await sb.from("profiles").select("user_id").eq("user_id", user.id).maybeSingle();
+    const prof = await sb.from("profiles").select("id,onboarded").eq("id", user.id).maybeSingle();
     if (prof.error) throw prof.error;
-    if (!prof.data) return go("/profile");
+    if (!prof.data?.onboarded) return go("/profile");
     return go(safeNext(req.cookies.get(NEXT_COOKIE)?.value));
-  } catch (err) {
-    console.warn("[oauth] callback failed:", err instanceof Error ? err.message : String(err));
+  } catch {
+    console.warn("[oauth] callback failed");
     await clearAuthCookies().catch(() => {});
     return go("/?error=oauth");
   }

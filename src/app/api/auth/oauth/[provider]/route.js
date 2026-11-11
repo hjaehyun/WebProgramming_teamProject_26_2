@@ -29,8 +29,8 @@ export async function GET(req, ctx) {
       maxAge: 600,
     });
     return res;
-  } catch (err) {
-    console.warn("[oauth] start failed:", err instanceof Error ? err.message : String(err));
+  } catch {
+    console.warn("[oauth] start failed");
     return NextResponse.redirect(new URL("/?error=oauth", origin));
   }
 }

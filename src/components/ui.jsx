@@ -97,20 +97,22 @@ export function BottomNav() {
 
 /** Wraps signed-in screens: waits for the store, sends users without a profile to setup. */
 export function Screen({ children, dark }) {
-  const { ready, authed, error, db } = useStore();
+  const { ready, authed, error, db, refresh } = useStore();
   const router = useRouter();
+  const path = usePathname();
   const needsLogin = ready && !authed && !error;
   const needsProfile = ready && authed && !db.profile;
 
   useEffect(() => {
-    if (needsLogin) router.replace("/");
+    if (db.deletionPending && path !== "/me") router.replace("/me");
+    else if (needsLogin) router.replace("/");
     else if (needsProfile) router.replace("/profile");
-  }, [needsLogin, needsProfile, router]);
+  }, [needsLogin, needsProfile, router, db.deletionPending, path]);
 
   return (
     <div className={dark ? "app dark" : "app"}>
       {error ? (
-        <div className="loading">{error}</div>
+        <div className="loading">{error}<button className="btn ghost" onClick={() => refresh()}>다시 불러오기</button></div>
       ) : ready && authed && !needsProfile ? (
         children
       ) : (

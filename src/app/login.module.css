@@ -10,6 +10,7 @@
 .signup { display: flex; justify-content: center; gap: 6px; font-size: 14px; color: var(--muted); }
 .signup button { border: 0; padding: 0; background: none; font: inherit; font-weight: 700; color: var(--accent-ink); cursor: pointer; }
 .error { margin: 0; font-size: 13px; color: #B5483A; }
+.success { margin: 0; font-size: 13px; line-height: 1.5; color: var(--accent-ink); }
 .notice { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .or { display: flex; align-items: center; gap: 10px; margin: 4px 0; font-size: 12px; color: var(--muted); }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line, #E5DFD3); }
