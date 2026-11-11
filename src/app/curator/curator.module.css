@@ -1,0 +1,15 @@
+.main { padding: 8px 20px 20px; display: flex; flex-direction: column; gap: 18px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.thumbs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.article { display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 16px; }
+.article h2 { margin: 0; font-size: 28px; font-weight: 700; line-height: 1.2; }
+.article p { margin: 0; font-size: 14px; line-height: 1.7; color: var(--ink-2); }
+.empty { display: flex; flex-direction: column; gap: 6px; padding: 24px 18px; text-align: center; }
+.empty strong { font-size: 22px; }
+.empty p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+.top { display: flex; flex-direction: column; gap: 8px; }
+.top h2 { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
+.topRow { display: flex; align-items: center; gap: 12px; }
+.topArt { width: 44px; height: 44px; flex-shrink: 0; border-radius: 10px; overflow: hidden; display: block; }
+.topTag { flex: 1; font-size: 14px; }
+.topCount { font-size: 13px; color: var(--muted); }

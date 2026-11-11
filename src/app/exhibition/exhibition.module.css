@@ -1,0 +1,28 @@
+.main { padding: 28px 16px 20px; display: flex; flex-direction: column; gap: 18px; }
+.titleRow { display: flex; align-items: flex-start; gap: 8px; }
+.title { flex: 1; min-width: 0; padding: 0 8px; display: flex; flex-direction: column; gap: 6px; }
+.title h1 { margin: 0; font-size: 38px; font-weight: 700; line-height: 1.1; }
+.title p { margin: 0; font-size: 14px; color: var(--ink-2); }
+
+.vis { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+.visRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.visRow div { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.visRow strong { font-size: 14px; color: var(--ink); }
+.sw { width: 52px; height: 32px; flex-shrink: 0; border: 0; border-radius: 16px; padding: 0; position: relative; cursor: pointer; background: #C9C2B5; }
+.swOn { background: var(--accent); }
+.knob { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 13px; background: #FFFFFF; transition: left .15s; }
+.swOn .knob { left: 23px; }
+.copy { height: 44px; border: 1px solid var(--line-2); border-radius: 22px; background: var(--bg); color: var(--ink); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }
+
+.works { display: flex; flex-direction: column; gap: 10px; }
+.worksHead { padding: 0 8px; }
+.worksHead h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.work { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.workArt { position: relative; border-radius: 12px; overflow: hidden; display: block; }
+.no { position: absolute; left: 8px; top: 8px; min-width: 22px; height: 22px; border-radius: 11px; background: #FFFFFF; font-size: 12px; font-weight: 700; color: var(--ink); display: flex; align-items: center; justify-content: center; }
+.work figcaption { display: flex; flex-direction: column; gap: 1px; font-size: 12px; color: var(--muted); }
+.work figcaption .hand { font-size: 18px; line-height: 1.25; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.add { aspect-ratio: 1; border: 2px dashed #C9C2B5; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-decoration: none; color: var(--ink-2); font-size: 13px; font-weight: 500; }
+
+.preview { min-height: 56px; padding: 0 16px; border-radius: 14px; background: var(--dark); color: #F2EFE9; display: flex; align-items: center; justify-content: space-between; text-decoration: none; font-size: 14px; font-weight: 500; }

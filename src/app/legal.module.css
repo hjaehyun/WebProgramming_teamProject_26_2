@@ -1,0 +1,11 @@
+/* Shared by /privacy and /terms: plain readable text inside the phone frame. */
+.main { padding: 4px 24px 40px; font-size: 14px; line-height: 1.7; color: var(--ink-2); word-break: keep-all; }
+.main h2 { margin: 28px 0 8px; font-size: 16px; color: var(--ink); }
+.main p { margin: 0 0 8px; }
+.main ul { margin: 0 0 8px; padding-left: 20px; }
+.main li { margin-bottom: 4px; }
+.main a { color: var(--accent-ink); }
+.meta { margin-bottom: 4px; font-size: 12px; color: var(--muted); }
+.table { width: 100%; margin: 4px 0 8px; border-collapse: collapse; font-size: 13px; }
+.table th, .table td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.table th { color: var(--ink); font-weight: 600; white-space: nowrap; }

@@ -1,0 +1,16 @@
+.main { padding: 8px 16px 20px; display: flex; flex-direction: column; gap: 18px; }
+.figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.frame { border-radius: 16px; overflow: hidden; display: block; box-shadow: 0 6px 20px rgba(35, 33, 29, 0.10); }
+.figure figcaption { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.badge { padding: 2px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); font-weight: 500; }
+.h { margin: 0 0 6px; }
+.summary { margin: 0; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+.fallback { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.tags { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--accent-ink); }
+.entries { display: flex; flex-direction: column; gap: 10px; }
+.entries h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.entry { display: flex; gap: 12px; align-items: baseline; }
+.entry span { width: 56px; flex-shrink: 0; font-size: 12px; color: var(--muted); text-align: right; }
+.entry p { margin: 0; flex: 1; font-size: 20px; line-height: 1.35; }
+.actions { display: flex; gap: 8px; }
+.download { width: 52px; height: 52px; flex-shrink: 0; border: 1px solid var(--line-2); border-radius: 26px; background: var(--surface); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; }

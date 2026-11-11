@@ -1,0 +1,45 @@
+.head { height: 56px; flex-shrink: 0; padding: 8px 24px 0; display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.back { margin-left: -12px; height: 40px; padding: 0 10px 0 4px; display: flex; align-items: center; gap: 2px; font-size: 14px; color: var(--ink); text-decoration: none; border-radius: 20px; }
+.back:hover { background: var(--soft); }
+.headRight { display: flex; align-items: center; gap: 12px; }
+.logout { border: 1px solid var(--line-2); border-radius: 14px; height: 28px; padding: 0 10px; background: transparent; font: inherit; color: var(--muted); cursor: pointer; }
+.dots { display: flex; gap: 6px; }
+.dot { width: 24px; height: 4px; border-radius: 2px; background: var(--line); }
+.on { background: var(--accent); }
+.main { padding: 20px 24px; }
+.section { display: flex; flex-direction: column; gap: 24px; }
+.title { display: flex; flex-direction: column; gap: 8px; }
+.title h1 { margin: 0; font-size: 34px; font-weight: 700; line-height: 1.15; }
+.title p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+.nameField { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.nameInput {
+  height: 56px; width: 100%; border: 0; border-bottom: 2px solid var(--line-2); padding: 0 2px;
+  font-size: 28px; background: transparent; color: var(--ink); outline: none;
+}
+.nameInput:focus { border-bottom-color: var(--accent); }
+.count { align-self: flex-end; font-size: 12px; font-weight: 400; color: var(--faint); }
+
+.nameCard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.avatar { width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; background: var(--accent-soft); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; }
+.nameText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 12px; color: var(--muted); }
+.nameText strong { font-size: 16px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edit { height: 36px; padding: 0 12px; border: 0; border-radius: 18px; background: #F0ECE5; color: var(--ink); font-size: 13px; cursor: pointer; }
+
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pick {
+  position: relative; display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 14px;
+  background: var(--surface); border: 2px solid var(--line); cursor: pointer; color: var(--ink); text-align: left;
+  transition: border-color .15s, background .15s, transform .15s;
+}
+.pick:active { transform: scale(0.98); }
+.pickOn { border-color: var(--accent); background: var(--accent-tint); }
+.thumb { border-radius: 9px; overflow: hidden; display: block; }
+.check {
+  position: absolute; right: 14px; top: 14px; width: 26px; height: 26px; border-radius: 13px;
+  background: var(--accent); color: #FFFFFF; display: none; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(35, 33, 29, 0.2);
+}
+.pickOn .check { display: flex; }
+.pickText { padding: 0 4px 2px; display: flex; flex-direction: column; gap: 1px; font-size: 12px; color: var(--muted); }
+.pickText strong { font-size: 14px; color: var(--ink); }
