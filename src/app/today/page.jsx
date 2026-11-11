@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Picture from "@/components/Picture";
+import Weather from "@/components/Weather";
 import { BottomNav, ProfileButton, Screen } from "@/components/ui";
 import { generateArtwork } from "@/lib/ai";
 import { clock, longDate, monthDay, todayKey, weekdayName } from "@/lib/date";
@@ -151,6 +152,7 @@ function Today() {
                 <div className={s.line}>
                   <span className={s.time}>
                     {t.am ? "오전" : "오후"} {t.label}
+                    <Weather weather={e.weather} at={e.at} />
                   </span>
                   <button
                     className={`hand ${s.bubble} ${open || editing ? s.sel : ""}`}

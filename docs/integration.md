@@ -163,7 +163,11 @@ JSON 변경 요청은 `Content-Type: application/json`과 동일 origin을 사�
 
 ## 다른 API 담당 조원에게 전달할 연결점
 
-`GET /api/me`의 `capabilities`는 현재 `{weather:false,music:false}`입니다. 날씨는 독립 라우트가 없으며 위치 권한 요청과 좌표 전송을 비활성화했습니다. `Entry.weather`는 `null`입니다. 음악의 두 경로는 `501`이며 `Artwork.song`, `mood`와 공개 전시의 `song`은 `null`입니다.
+`GET /api/me`의 `capabilities.music`은 `false`이고, `capabilities.weather`는 서버에 `KMA_SERVICE_KEY`가 있을 때만 `true`입니다(2026-11-12 추가, 현재 운영에는 키·마이그레이션 미적용이라 `false`).
+
+날씨는 독립 라우트 없이 `POST /api/me/entries`에서 처리합니다. 기능이 켜져 있고 사용자가 위치를 허용하면 프론트가 소수점 2자리 `lat`, `lon`을 함께 보내고, 서버(`src/server/weather.ts`)가 기상청 초단기예보를 격자 번호로 조회해 `set_entry_weather` RPC로 조각글에 `weather_code`, `temp_c`를 한 번 기록합니다. 응답의 `Entry.weather`는 `{weather,tempC}` 또는 `null`입니다. 좌표는 저장·기록하지 않고, 조회 실패·한국 밖 좌표·위치 거부는 날씨 없이 저장합니다. 그림 생성 입력(`entry_snapshot`)에는 날씨를 넣지 않습니다. 화면은 오늘·그림 자세히 보기의 조각글 시각 아래에 아이콘과 기온을 표시합니다(`src/components/Weather.jsx`). **켜는 순서: `supabase/migrations/20261112003000_entry_weather.sql` 적용 → `KMA_SERVICE_KEY` 설정.** 키를 먼저 넣으면 없는 컬럼을 조회해 `/api/me`가 실패합니다.
+
+음악의 두 경로는 `501`이며 `Artwork.song`, `mood`와 공개 전시의 `song`은 `null`입니다.
 
 실제 API를 구현할 때 제공자 키는 서버에 두고, 응답 DTO·DB 보관 범위·한도·실패 처리를 합의한 뒤 해당 capability를 켭니다. 음악 카드의 후보 필드(`id`, `videoId`, `title`, `channel`)는 `types.js`에 참고용으로 남기지만 현재 DB에 `song_pool`이 있다고 가정하지 않습니다. 위치·외부 서비스 전송 범위가 바뀌면 개인정보처리방침도 실제 동작과 맞춰 검토합니다.
 
