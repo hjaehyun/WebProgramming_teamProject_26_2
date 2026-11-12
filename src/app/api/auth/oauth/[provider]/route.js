@@ -15,7 +15,13 @@ export async function GET(req, ctx) {
     const sb = await supabaseForRequest();
     const { data, error } = await sb.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${origin}/api/auth/callback`, skipBrowserRedirect: true },
+      // prompt=select_account: both Google and Kakao show the account chooser every time, so a user who
+      // picked the wrong account can log out and pick another instead of being signed straight back in.
+      options: {
+        redirectTo: `${origin}/api/auth/callback`,
+        skipBrowserRedirect: true,
+        queryParams: { prompt: "select_account" },
+      },
     });
     if (error || !data.url) throw error ?? new Error("no provider url");
 
