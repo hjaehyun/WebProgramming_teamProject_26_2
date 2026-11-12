@@ -2,12 +2,18 @@ import "server-only";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { HttpError } from "./request";
 import { accountInfo } from "./oauth";
+import { weatherEnabled } from "./weather";
 
 export type Row = Record<string, any>;
 export const artworkColumns = "id,user_id,artwork_date,status,art_style,title,scene_summary,image_prompt,image_path,scene,tags,error_message,attempts,last_request_id";
 export function toStyle(style: string) { return style === "watercolor" ? "water" : style; }
 export function fromStyle(style: string) { return style === "water" ? "watercolor" : style; }
-export function entryView(row: Row) { return { id: row.id, at: row.created_at, text: row.content, weather: null }; }
+// The weather columns exist only after the entry_weather migration, so they are selected only when the feature is on.
+export function entryColumns() { return weatherEnabled() ? "id,content,created_at,entry_date,weather_code,temp_c" : "id,content,created_at,entry_date"; }
+export function entryView(row: Row) {
+  const weather = row.weather_code && row.temp_c != null ? { weather: row.weather_code, tempC: Number(row.temp_c) } : null;
+  return { id: row.id, at: row.created_at, text: row.content, weather };
+}
 export function artworkView(row: Row, entries: Row[], imageUrl: string | null) {
   return { id: row.id, date: row.artwork_date, scene: row.scene ?? "day", style: toStyle(row.art_style),
     summary: row.scene_summary ?? "", tags: row.tags ?? [], entries: entries.map(entryView), imageUrl, imageError: Boolean(row.image_path && !imageUrl),
@@ -25,7 +31,7 @@ export async function signImages(db: SupabaseClient, rows: Row[], ttl = 3600) {
 export async function getArtwork(db: SupabaseClient, userId: string, date: string) {
   const [art, entries] = await Promise.all([
     db.from("daily_artworks").select(artworkColumns).eq("user_id", userId).eq("artwork_date", date).maybeSingle(),
-    db.from("entries").select("id,content,created_at,entry_date").eq("user_id", userId).eq("entry_date", date).order("created_at"),
+    db.from("entries").select(entryColumns()).eq("user_id", userId).eq("entry_date", date).order("created_at"),
   ]);
   if (art.error || entries.error) throw art.error ?? entries.error;
   if (!art.data) throw new HttpError(404, "그림을 찾을 수 없어요.");
@@ -36,7 +42,7 @@ export async function getArtwork(db: SupabaseClient, userId: string, date: strin
 async function allEntries(db: SupabaseClient, userId: string) {
   const rows: Row[] = [];
   for (let start = 0; ; start += 1000) {
-    const r = await db.from("entries").select("id,content,created_at,entry_date").eq("user_id",userId).order("created_at").order("id").range(start,start+999);
+    const r = await db.from("entries").select(entryColumns()).eq("user_id",userId).order("created_at").order("id").range(start,start+999);
     if (r.error) throw r.error;
     rows.push(...(r.data ?? [])); if ((r.data?.length ?? 0) < 1000) return rows;
   }
@@ -78,6 +84,6 @@ export async function dashboard(db: SupabaseClient, user: User, profile: Row) {
     deletionPending:false,
     drafts,artworks,
     exhibition: ex.data ? { id:ex.data.id,title:ex.data.title,desc:ex.data.description,isPublic:ex.data.is_public,dates } : {id:"",title:"나의 하루조각",desc:"",isPublic:false,dates:[]},
-    capabilities: { weather:false,music:false },
+    capabilities: { weather:weatherEnabled(),music:false },
   };
 }

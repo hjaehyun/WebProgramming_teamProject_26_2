@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Picture from "@/components/Picture";
 import SongCard from "@/components/SongCard";
+import Weather from "@/components/Weather";
 import { IconBack, IconNext, Screen, TopBar } from "@/components/ui";
 import { clock, longDate } from "@/lib/date";
 import { generateArtwork } from "@/lib/ai";
@@ -156,6 +157,7 @@ function Detail() {
               <div key={e.id} className={s.entry}>
                 <span>
                   {t.am ? "오전" : "오후"} {t.label}
+                  <Weather weather={e.weather} at={e.at} />
                 </span>
                 <p className="hand">{e.text}</p>
               </div>

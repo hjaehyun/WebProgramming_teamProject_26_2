@@ -13,7 +13,7 @@ export default function PrivacyPage() {
     <div className="app">
       <TopBar title="개인정보처리방침" back="/" />
       <main className={`scroll ${s.main}`}>
-        <p className={s.meta}>시행일 2026년 11월 11일</p>
+        <p className={s.meta}>시행일 2026년 11월 12일</p>
         <p>
           하루조각은 웹프로그래밍 수업 팀 프로젝트로 만든 그림일기 서비스예요. 서비스에 필요한 정보만 받고, 탈퇴하면 모두
           지워요.
@@ -46,7 +46,9 @@ export default function PrivacyPage() {
             <tr>
               <th>위치</th>
               <td>
-                현재 날씨 조회는 연결 준비 중이며 위치를 요청하거나 저장하지 않아요. 연결 시 전송 정보와 이용 방법을 먼저 안내해요.
+                조각글을 저장할 때 브라우저가 위치 허용을 물어요. 허용하면 약 1km 단위로 줄인 좌표를 서버로 보내 그 순간의
+                날씨를 찾는 데만 쓰고, 좌표는 저장하거나 기록하지 않아요. 조각글에는 날씨(맑음·비 등)와 기온만 남아요.
+                허용하지 않아도 날씨 없이 그대로 쓸 수 있어요.
               </td>
             </tr>
           </tbody>
@@ -85,7 +87,10 @@ export default function PrivacyPage() {
             </tr>
             <tr>
               <th>기상청</th>
-              <td>날씨 조회는 현재 연결 준비 중이며 정보를 보내지 않아요.</td>
+              <td>
+                날씨 조회(공공데이터포털의 기상청 단기예보). 위치를 허용했을 때만, 좌표 대신 약 5km 크기의 예보 구역
+                번호만 보내요. 계정 정보나 조각글은 보내지 않아요
+              </td>
             </tr>
             <tr>
               <th>Vercel</th>

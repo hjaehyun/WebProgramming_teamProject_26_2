@@ -30,7 +30,17 @@
  * @property {string} id UUID. 클라이언트가 작성 요청 ID로 만들고 DB가 소유권을 확인.
  * @property {string} at 서버 저장 시각 (ISO timestamp).
  * @property {string} text
- * @property {null} weather 날씨 API는 아직 미연결. 현재 항상 null.
+ * @property {EntryWeather|null} weather 조각글을 쓴 순간의 기상청 날씨. 위치 거부·조회 실패·기능 비활성 시 null. 좌표는 포함하지 않음.
+ */
+
+/**
+ * @typedef {"clear"|"cloudy"|"overcast"|"rain"|"rain_snow"|"snow"|"shower"} WeatherCode
+ */
+
+/**
+ * @typedef {Object} EntryWeather
+ * @property {WeatherCode} weather
+ * @property {number} tempC 섭씨 기온 (소수점 한 자리).
  */
 
 /**
@@ -67,7 +77,7 @@
 
 /**
  * @typedef {Object} Capabilities
- * @property {boolean} weather 현재 false. 켜기 전에는 위치 수집·전송하지 않음.
+ * @property {boolean} weather 서버에 KMA_SERVICE_KEY가 있을 때만 true. false면 위치 수집·전송하지 않음.
  * @property {boolean} music 현재 false. 음악 변경 API는 501.
  */
 
@@ -85,6 +95,7 @@
 
 /**
  * POST /api/me/entries. at/weather/사용자 ID는 입력 계약에 없음.
+ * capabilities.weather가 true이고 위치를 허용하면 소수점 2자리로 줄인 lat, lon을 함께 보냄 (날씨 조회에만 쓰고 저장하지 않음).
  * @typedef {Object} CreateEntryInput
  * @property {DateKey} date
  * @property {{id:string,text:string}} entry id는 UUID, text는 1~500자.
