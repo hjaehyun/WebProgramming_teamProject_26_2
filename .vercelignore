@@ -2,12 +2,14 @@
 .git
 .next
 node_modules
-output
-tmp
-coverage
-tests
-docs
-supabase
-specs
+# A leading "/" keeps these to the repo root. Without it, "supabase" also matched
+# src/server/core/supabase/ and the build could not find ./core/supabase/server.
+/output
+/tmp
+/coverage
+/tests
+/docs
+/supabase
+/specs
 **/*.test.*
 *.tsbuildinfo
