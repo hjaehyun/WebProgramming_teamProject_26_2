@@ -63,7 +63,7 @@
  * @property {string|null} requestId 마지막 그림 요청 UUID. 본인 응답에만 포함.
  * @property {boolean} canRetry attempts < 3이고 status가 failed 또는 ready인 경우.
  * @property {Song|null} song 그림에 붙인 YouTube 곡. 아직 고르지 않았거나 기능이 꺼져 있으면 null.
- * @property {null} mood 항상 null. 곡을 고르는 분위기는 서버 DB에만 있음. AI가 분위기를 정하지 못한 그림은 노래 요청 응답의 song이 null ("노래 추천 없음").
+ * @property {null} mood 항상 null. 곡을 고르는 분위기는 서버 DB에만 있음. 저장된 분위기가 없는 그림은 노래 요청 시 기본 calm 목록을 사용함.
  */
 
 /**

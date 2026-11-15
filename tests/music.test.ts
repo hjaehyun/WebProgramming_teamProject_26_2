@@ -162,7 +162,7 @@ describe("songs through the API", () => {
     expect((await post()).status).toBe(200);
   });
 
-  test("a picture without a mood gets no song and no YouTube-dependent error", async () => {
+  test("no eligible songs is a successful empty recommendation, not a provider error", async () => {
     youtube();
     picked = { song: null, unchanged: true, refill: null };
     const r = await post();
@@ -220,9 +220,9 @@ describe("song migration on actual PostgreSQL", () => {
   }
   async function asWorker() { await db.exec("reset role; set role service_role"); }
   /** A finished picture for the user, inserted the way the worker leaves it. */
-  async function picture({ user = alice, mood = "lonely" as string | null, scene = "day", status = "ready" } = {}) {
+  async function picture({ user = alice, mood = "lonely" as string | null, scene = "day", status = "ready", day = today } = {}) {
     await asWorker();
-    const id = (await db.query<{ id: string }>("insert into public.daily_artworks(user_id,artwork_date,status,art_style,entry_snapshot,scene,mood) values($1,$2::date,$3,'watercolor','[]',$4,$5) returning id", [user, today, status, scene, mood])).rows[0].id;
+    const id = (await db.query<{ id: string }>("insert into public.daily_artworks(user_id,artwork_date,status,art_style,entry_snapshot,scene,mood) values($1,$2::date,$3,'watercolor','[]',$4,$5) returning id", [user, day, status, scene, mood])).rows[0].id;
     await asUser(user);
     return id;
   }
@@ -232,8 +232,9 @@ describe("song migration on actual PostgreSQL", () => {
     await asUser();
     return Number(id);
   }
-  const pick = async (reroll = false) => (await db.query<{ r: Pick }>("select public.pick_song($1::date,$2) as r", [today, reroll])).rows[0].r;
+  const pick = async (reroll = false, day = today) => (await db.query<{ r: Pick }>("select public.pick_song($1::date,$2) as r", [day, reroll])).rows[0].r;
   const migration = (file: string) => readFile(`supabase/migrations/${file}.sql`, "utf8");
+  const fallbackMigration = "20261115110029_songs_without_artwork_mood";
 
   beforeAll(async () => {
     db = new PGlite();
@@ -260,6 +261,8 @@ describe("song migration on actual PostgreSQL", () => {
     expect((await db.query("select * from public.song_pool")).rows).toHaveLength(0);
     expect((await db.query("select * from public.artwork_songs")).rows).toHaveLength(0);
     expect((await db.query("select id,mood from public.daily_artworks")).rows).toEqual([{ id: art, mood: "calm" }]);
+    // Apply the additive follow-up after the historical table-rebuild migration.
+    await db.exec(await migration(fallbackMigration));
     today = (await db.query<{ day: string }>("select ((now() at time zone 'Asia/Seoul')::date)::text as day")).rows[0].day;
   }, 30000);
 
@@ -272,48 +275,77 @@ describe("song migration on actual PostgreSQL", () => {
   afterAll(async () => { await db?.close(); });
 
   describe("picking and voting", () => {
-    test("an empty or month-old pool asks for a refill instead of picking", async () => {
-      await picture();
-      expect(await pick()).toEqual({ song: null, unchanged: true, refill: "lonely" });
-      await pool("lonely", "aaaaaaaaaaa", "31 days");
+    test("the follow-up migration preserves existing artwork, songs, links and feedback when applied twice", async () => {
+      await picture({ mood: null });
+      const songId = await pool("calm", "aaaaaaaaaaa");
+      await pick();
+      await db.query("select public.vote_song($1,1)", [songId]);
+      await db.exec("reset role");
+      const snapshot = async () => Promise.all([
+        db.query("select to_jsonb(a) as row from public.daily_artworks a order by id"),
+        db.query("select to_jsonb(s) as row from public.song_pool s order by id"),
+        db.query("select to_jsonb(s) as row from public.artwork_songs s order by artwork_id"),
+        db.query("select to_jsonb(f) as row from public.song_feedback f order by user_id,song_id"),
+      ]).then(results => results.map(result => result.rows));
+      const before = await snapshot();
+      expect(before.map(rows => rows.length)).toEqual([1, 1, 1, 1]);
+      for (let i = 0; i < 2; i++) {
+        await db.exec(await migration(fallbackMigration));
+        expect(await snapshot()).toEqual(before);
+      }
+    });
+
+    test.each(["lonely", null])("an empty or month-old pool asks for a refill for mood %s", async mood => {
+      const expectedMood = mood ?? "calm";
+      await picture({ mood });
+      expect(await pick()).toEqual({ song: null, unchanged: true, refill: expectedMood });
+      await pool(expectedMood, "aaaaaaaaaaa", "31 days");
       await pool("cozy", "bbbbbbbbbbb");
-      expect((await pick()).refill).toBe("lonely");
+      expect((await pick()).refill).toBe(expectedMood);
       expect((await db.query("select * from public.artwork_songs")).rows).toHaveLength(0);
     });
 
-    test("the song comes from the picture's mood; a picture without one gets no song, whatever its scene", async () => {
-      const dreamy = await pool("dreamy", "aaaaaaaaaaa");
-      for (const mood of ["calm", "cozy", "lively", "lonely", "flutter"]) await pool(mood, `${mood[0]}${mood[1]}ccccccccc`);
-      const art = await picture({ mood: null, scene: "day" });
-      const nothing = { song: null, unchanged: true, refill: null };
+    test("old pictures without a mood use calm songs without changing or redrawing the artwork", async () => {
+      const calm = await pool("calm", "aaaaaaaaaaa");
+      for (const mood of ["cozy", "lively", "lonely", "flutter", "dreamy"]) await pool(mood, `${mood[0]}${mood[1]}ccccccccc`);
+      const oldDay = (await db.query<{ day: string }>("select ($1::date-9)::text as day", [today])).rows[0].day;
+      const art = await picture({ mood: null, day: oldDay });
+      await asWorker();
+      await db.query("update public.daily_artworks set image_path=$2,image_prompt='An existing park',scene_summary='이미 완성된 하루',title='기존 그림',attempts=2 where id=$1", [art, `${alice}/${art}/original.png`]);
       for (const scene of ["day", "park", "cafe", "cat", "rain", "night"]) {
         await asWorker(); await db.query("update public.daily_artworks set scene=$2 where id=$1", [art, scene]); await asUser();
-        expect(await pick()).toEqual(nothing);
-        expect(await pick(true)).toEqual(nothing);
+        const before = (await db.query("select to_jsonb(a) as artwork from public.daily_artworks a where id=$1", [art])).rows;
+        expect((await pick(false, oldDay)).song?.id).toBe(calm);
+        expect((await pick(true, oldDay)).song?.id).toBe(calm);
+        expect((await db.query("select to_jsonb(a) as artwork from public.daily_artworks a where id=$1", [art])).rows).toEqual(before);
       }
-      expect((await db.query("select * from public.artwork_songs")).rows).toHaveLength(0);
-      // Once it has a mood (e.g. after a redraw) it picks from that mood's list.
-      await asWorker(); await db.query("update public.daily_artworks set mood='dreamy' where id=$1", [art]); await asUser();
+      expect((await db.query("select artwork_id,song_id from public.artwork_songs")).rows).toEqual([{ artwork_id: art, song_id: calm }]);
+    });
+
+    test("a known mood still chooses its own list, and losing it keeps an existing song until reroll", async () => {
+      const dreamy = await pool("dreamy", "aaaaaaaaaaa");
+      const calm = await pool("calm", "bbbbbbbbbbb");
+      const art = await picture({ mood: "dreamy" });
       const picked = await pick();
       expect(picked.song?.id).toBe(dreamy);
-      // A song attached earlier stays if the mood is lost; it just cannot be rerolled.
       await asWorker(); await db.query("update public.daily_artworks set mood=null where id=$1", [art]); await asUser();
       expect(await pick()).toEqual({ ...picked, unchanged: true });
-      expect(await pick(true)).toEqual({ ...picked, unchanged: true });
+      expect((await pick(true)).song?.id).toBe(calm);
       await expect(db.query("update public.daily_artworks set mood='calm'")).rejects.toThrow(/permission denied/);
       await asWorker();
       await expect(db.query("update public.daily_artworks set mood='angry'")).rejects.toThrow(/check constraint/);
     });
 
-    test("the first pick is kept; only a reroll changes it, and to a different song", async () => {
-      const art = await picture();
-      const first = await pool("lonely", "aaaaaaaaaaa");
+    test.each(["lonely", null])("the first pick is kept and reroll chooses another song for mood %s", async mood => {
+      const expectedMood = mood ?? "calm";
+      const art = await picture({ mood });
+      const first = await pool(expectedMood, "aaaaaaaaaaa");
       const picked = await pick();
       expect(picked).toEqual({ song: { id: first, videoId: "aaaaaaaaaaa", title: "노래 aaaaaaaaaaa", channel: "채널" }, unchanged: false, refill: null });
       expect(await pick()).toEqual({ ...picked, unchanged: true });
       // Nothing else in the pool: the reroll keeps the song.
       expect(await pick(true)).toEqual({ ...picked, unchanged: true });
-      const second = await pool("lonely", "ccccccccccc");
+      const second = await pool(expectedMood, "ccccccccccc");
       await pool("lively", "ddddddddddd");
       for (let i = 0; i < 4; i++) {
         const next = await pick(true);
@@ -323,9 +355,10 @@ describe("song migration on actual PostgreSQL", () => {
       expect((await db.query("select artwork_id,song_id from public.artwork_songs")).rows).toEqual([{ artwork_id: art, song_id: expect.anything() }]);
     });
 
-    test("a disliked song is never offered again; votes are per user and replaceable", async () => {
-      await picture();
-      const a = await pool("lonely", "aaaaaaaaaaa"), b = await pool("lonely", "bbbbbbbbbbb");
+    test.each(["lonely", null])("disliked songs stay excluded and votes remain per user for mood %s", async mood => {
+      const expectedMood = mood ?? "calm";
+      await picture({ mood });
+      const a = await pool(expectedMood, "aaaaaaaaaaa"), b = await pool(expectedMood, "bbbbbbbbbbb");
       await db.query("select public.vote_song($1,-1)", [a]);
       for (let i = 0; i < 5; i++) expect((await pick(true)).song?.id).toBe(b);
       await db.query("select public.vote_song($1,1)", [a]);
@@ -337,19 +370,20 @@ describe("song migration on actual PostgreSQL", () => {
       expect((await db.query("select * from public.song_feedback")).rows).toHaveLength(0);
     });
 
-    test("only the owner's finished picture can get a song", async () => {
-      await pool("lonely", "aaaaaaaaaaa");
+    test.each(["lonely", null])("only the owner's finished picture can get a song for mood %s", async mood => {
+      await pool(mood ?? "calm", "aaaaaaaaaaa");
       await expect(pick()).rejects.toThrow(/완성된 그림/);
-      await picture({ status: "processing" });
+      const art = await picture({ status: "processing", mood });
       await expect(pick()).rejects.toThrow(/완성된 그림/);
+      await asWorker(); await db.query("update public.daily_artworks set status='ready' where id=$1", [art]);
       await asUser(bob);
       await expect(pick()).rejects.toThrow(/완성된 그림/);
       expect((await db.query("select * from public.artwork_songs")).rows).toHaveLength(0);
     });
 
-    test("clients cannot write the pool or links, cannot see other people's links, and deletion is refused", async () => {
-      const art = await picture();
-      const song = await pool("lonely", "aaaaaaaaaaa");
+    test.each(["lonely", null])("write restrictions, private links and deletion guards remain for mood %s", async mood => {
+      const art = await picture({ mood });
+      const song = await pool(mood ?? "calm", "aaaaaaaaaaa");
       await pick();
       await expect(db.query("insert into public.song_pool(mood,video_id,title) values('calm','zzzzzzzzzzz','x')")).rejects.toThrow(/permission denied/);
       await expect(db.query("update public.artwork_songs set song_id=$1", [song])).rejects.toThrow(/permission denied/);
