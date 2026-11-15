@@ -22,8 +22,8 @@ export async function processOne(id?: string) {
     if (checkpoint.error) throw checkpoint.error;
     // The mood only chooses the song list. Its column exists after the artwork_songs migration, so this
     // write is separate and never fails the picture. A new summary without a clear mood stores NULL
-    // (no song recommendation), which also clears the mood of the drawing it replaces.
-    if (!resumed) try { await db.from("daily_artworks").update({ mood: scene.mood ?? null }).eq("id", job.id).eq("claim_token", job.claim_token).eq("status", "processing").select("id").maybeSingle(); } catch { /* no mood: no song recommendation */ }
+    // and clears the mood of the drawing it replaces. Song selection uses a default calm list for NULL.
+    if (!resumed) try { await db.from("daily_artworks").update({ mood: scene.mood ?? null }).eq("id", job.id).eq("claim_token", job.claim_token).eq("status", "processing").select("id").maybeSingle(); } catch { /* optional mood storage must not fail the picture */ }
     const png = await illustrate(scene.image_prompt);
     const { error: uploadError } = await db.storage.from("artworks").upload(path, png, { contentType: "image/png", upsert: false });
     if (uploadError) throw uploadError;

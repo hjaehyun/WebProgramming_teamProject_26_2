@@ -39,7 +39,7 @@ function Detail() {
     setSongNote(null);
     try {
       const r = await requestSong(date, reroll);
-      // No song after asking: the AI found no clear mood for this day (or it was drawn before moods existed).
+      // Handle an empty response; a missing mood normally uses the server's default calm song list.
       if (!r.song) setSongNote({ date, text: "노래 추천 없음" });
       else if (reroll && r.unchanged) setSongNote({ date, text: "다른 곡이 아직 없어요" });
     } catch (err) {
