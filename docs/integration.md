@@ -52,6 +52,7 @@ npm run dev
 | `OPENAI_API_KEY` | 서버 전용 GPT 호출 키 |
 | `OPENAI_TEXT_MODEL`, `OPENAI_IMAGE_MODEL` | 기존 프로젝트의 모델 설정 유지 |
 | `CRON_SECRET` | 작업 호출 인증용 서버 전용 공통 비밀값, 32자 이상 |
+| `YOUTUBE_API_KEY` | 서버 전용 YouTube Data API v3 키. 비우면 노래 기능 꺼짐 |
 
 팀 코드 호환용 `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` 및 관리자 키 별칭 `SUPABASE_SERVICE_ROLE_KEY`도 지원합니다. 둘을 함께 설정하면 `NEXT_PUBLIC_*` 및 `SUPABASE_SECRET_KEY`를 우선 사용합니다. OAuth 제공자 비밀값은 Supabase 제공자 설정에서 관리합니다.
 
@@ -137,8 +138,8 @@ JSON 변경 요청은 `Content-Type: application/json`과 동일 origin을 사�
 | `GET /api/exhibitions/[id]` | 없음 | `PublicExhibition`; 비공개는 본인만 |
 | `GET /api/exhibitions/[id]/images/[date]` | 없음 | 공개 상태·선택·소유권 검사 후 이미지 |
 | `POST /api/curate` | `{dates}` | `{headline,body}` |
-| `POST /api/me/artworks/[date]/song` | 미구현 | 인증 사용자에게 `501` |
-| `POST /api/me/songs/[id]/feedback` | 미구현 | 인증 사용자에게 `501` |
+| `POST /api/me/artworks/[date]/song` | `{reroll?}` | `{song:Song\|null,unchanged}`; 기능이 꺼져 있으면 `501` |
+| `POST /api/me/songs/[id]/feedback` | `{vote:1\|-1}` | `{ok:true}`; 기능이 꺼져 있으면 `501` |
 | `POST /api/jobs` | 서버의 `Authorization: Bearer …` | 작업 처리 결과; 브라우저 사용 API가 아님 |
 
 옛 `POST /api/summarize`, `/api/draw`, `/api/me/artworks`, `/api/me/artworks/[date]/redraw` 계약은 사용하지 않습니다. 서버의 `/api/artworks`가 요약·그림·저장을 관리합니다. `/api/curate`도 클라이언트 요약문을 받지 않고 날짜로 본인 저장 자료를 조회합니다.
@@ -163,13 +164,29 @@ JSON 변경 요청은 `Content-Type: application/json`과 동일 origin을 사�
 
 ## 다른 API 담당 조원에게 전달할 연결점
 
-`GET /api/me`의 `capabilities.music`은 `false`이고, `capabilities.weather`는 서버에 `KMA_SERVICE_KEY`가 있을 때만 `true`입니다(2026-11-12 추가, 현재 운영에는 키·마이그레이션 미적용이라 `false`).
+`GET /api/me`의 `capabilities.music`은 아래 "노래" 절의 조건에서만 `true`이고, `capabilities.weather`는 서버에 `KMA_SERVICE_KEY`가 있을 때만 `true`입니다(2026-11-12 추가, 현재 운영에는 키·마이그레이션 미적용이라 `false`).
 
 날씨는 독립 라우트 없이 `POST /api/me/entries`에서 처리합니다. 기능이 켜져 있고 사용자가 위치를 허용하면 프론트가 소수점 2자리 `lat`, `lon`을 함께 보내고, 서버(`src/server/weather.ts`)가 기상청 초단기예보를 격자 번호로 조회해 `set_entry_weather` RPC로 조각글에 `weather_code`, `temp_c`를 한 번 기록합니다. 응답의 `Entry.weather`는 `{weather,tempC}` 또는 `null`입니다. 좌표는 저장·기록하지 않고, 조회 실패·한국 밖 좌표·위치 거부는 날씨 없이 저장합니다. 그림 생성 입력(`entry_snapshot`)에는 날씨를 넣지 않습니다. 화면은 오늘·그림 자세히 보기의 조각글 시각 아래에 아이콘과 기온을 표시합니다(`src/components/Weather.jsx`). **켜는 순서: `supabase/migrations/20261112003000_entry_weather.sql` 적용 → `KMA_SERVICE_KEY` 설정.** 키를 먼저 넣으면 없는 컬럼을 조회해 `/api/me`가 실패합니다.
 
-음악의 두 경로는 `501`이며 `Artwork.song`, `mood`와 공개 전시의 `song`은 `null`입니다.
+### 노래 (YouTube Data API v3, 2026-11-15 추가)
 
-실제 API를 구현할 때 제공자 키는 서버에 두고, 응답 DTO·DB 보관 범위·한도·실패 처리를 합의한 뒤 해당 capability를 켭니다. 음악 카드의 후보 필드(`id`, `videoId`, `title`, `channel`)는 `types.js`에 참고용으로 남기지만 현재 DB에 `song_pool`이 있다고 가정하지 않습니다. 위치·외부 서비스 전송 범위가 바뀌면 개인정보처리방침도 실제 동작과 맞춰 검토합니다.
+완성된 그림(`status=ready`)에 YouTube 곡 하나를 붙입니다. 곡은 검색하지 않고, 분위기 6종(`calm`, `cozy`, `lively`, `lonely`, `flutter`, `dreamy`)마다 직접 고른 20곡(합계 120곡, 피아노 커버) 중에서 고릅니다. 구현은 `src/server/song-list.ts`(곡 목록), `src/server/music.ts`(YouTube 확인·공용 목록 동기화·두 경로), 마이그레이션 `20261115090000_artwork_songs.sql`입니다. 화면(`SongCard.jsx`, 그림 자세히 보기, 공개 전시)은 기존 그대로 사용합니다.
+
+- **분위기**: 하루를 요약할 때 GPT가 장면의 분위기 하나를 함께 고르고(`core/ai.ts`의 `mood`), 작업 처리기가 `daily_artworks.mood`에 저장합니다. 이 저장은 그림 완성과 분리돼 있어 실패해도 그림은 완성됩니다. GPT는 조각글에서 분위기가 뚜렷하지 않으면 `none`을 고를 수 있고, 이때는 분위기를 `NULL`로 저장합니다. **분위기가 없는 그림(GPT가 `none`으로 판단한 날, 이 기능 이전에 그린 그림)에는 노래를 추천하지 않습니다.** `scene`으로 대신하지 않습니다. "노래 추천받기" 버튼은 그대로 보이고, 누르면 `pick_song`이 `song:null`을 반환해 화면이 "노래 추천 없음"을 표시합니다. 다시 그리면 분위기를 새로 판단합니다(다시 `none`이면 분위기가 지워지고, 이미 붙어 있던 곡은 남습니다). 분위기 값은 본인 응답(`Artwork.mood`는 항상 `null`)과 공개 전시 응답 어디에도 넣지 않습니다.
+- **YouTube Data API의 역할**: 목록의 영상이 지금도 공개·퍼가기 가능한지 확인하는 것뿐입니다(`videos.list`, 50개당 1단위 → 120곡에 3단위). **YouTube로 보내는 것은 목록의 영상 id뿐**이며 조각글·요약·태그·분위기·계정 정보는 보내지 않습니다. API 키는 URL이 아니라 요청 헤더(`X-Goog-Api-Key`)로 보냅니다. 브라우저는 "YouTube로 듣기"를 누르기 전에는 YouTube에 접속하지 않습니다.
+- **저장**: 확인을 통과한 곡을 모두가 함께 쓰는 `song_pool`(`mood`, 영상 id, 목록의 제목·채널, 확인 시각)에 두고, 그림과 곡의 연결은 `artwork_songs`, 좋아요/싫어요는 `song_feedback`에 둡니다. 세 테이블 모두 클라이언트는 읽기만 가능하고, 쓰기는 `pick_song`·`vote_song` RPC와 서버(service role)만 합니다.
+- **동기화**: 노래 요청이 들어왔을 때 `song_pool`의 마지막 확인 시각이 24시간을 넘었으면 목록 전체를 YouTube로 확인해 `song_pool`을 "목록에 있고 재생 가능한 곡"과 같게 맞춥니다. 확인 시각을 DB에서 읽으므로 요청 수나 서버 인스턴스 수와 관계없이 하루 3단위 정도만 씁니다. 재생할 수 없게 된 영상과 목록에서 뺀 곡은 삭제되고, 그 곡이 붙어 있던 그림은 곡이 없는 상태로 돌아갑니다. 확인한 지 30일이 지난 행은 추천하지 않습니다.
+- **목록 바꾸기**: `song-list.ts`의 `[분위기]` 아래에 `영상id | 곡 | 채널` 줄을 넣거나 빼고 배포하면 됩니다. 다음 확인 때(늦어도 하루 안) 반영됩니다.
+- **곡 고르기**: `pick_song(date, reroll)`이 DB에서 고릅니다. 이미 곡이 있으면 그대로 반환하고, `reroll`이면 지금 곡을 뺀 같은 분위기의 곡 중 무작위로 고릅니다(싫어요 한 곡 제외, 좋아요 한 곡은 2배 확률). 다른 곡이 없으면 `unchanged:true`입니다.
+- **실패 처리**: YouTube 확인이 실패해도(할당량 초과, 4초 시간 초과 등) 저장된 곡이 있으면 그대로 고릅니다. 해당 분위기에 쓸 수 있는 곡이 하나도 없을 때만 `503`입니다. 실패 후 같은 인스턴스에서는 10분간 다시 호출하지 않고, 키·요청 URL은 로그에 남기지 않습니다. YouTube 응답에서 목록의 절반 넘게 빠져 있으면 장애로 보고 아무것도 지우지 않습니다.
+- **켜는 법**: `artwork_songs` 마이그레이션 적용 + 서버에 `YOUTUBE_API_KEY`(와 기존 `SUPABASE_SECRET_KEY`). `capabilities.music`은 키가 있고 `artwork_songs`를 읽을 수 있을 때만 `true`입니다. 날씨와 달리 순서가 바뀌어도 `/api/me`와 그림 생성은 실패하지 않고 노래만 꺼진 상태로 보입니다. Google Cloud에서 키는 YouTube Data API v3로만 제한하는 것을 권합니다(서버에서 호출하므로 HTTP 리퍼러 제한은 쓰지 않습니다).
+
+- **접근 제어**: 두 경로 모두 같은 출처 검사·로그인·탈퇴 중 차단을 거칩니다. 소유권·완성 여부·투표 값은 DB 함수가 다시 검사하므로 Supabase에 직접 요청해도 남의 그림이나 공용 목록을 바꿀 수 없습니다. 공개 전시는 그 전시에 선택된 완성 그림의 곡(영상 id·제목·채널)만 내보냅니다. 다만 붙은 곡이 어느 분위기 목록의 곡인지는 드러날 수 있습니다.
+- **남은 한계**: "다른 곡" 요청 횟수 제한은 없습니다(외부 호출·비용 없이 DB 쓰기 한 번).
+
+모의 곡(`MOCK_` id, `src/lib/mockSong.js`)을 내는 서버 경로는 없습니다.
+
+새 외부 API를 구현할 때 제공자 키는 서버에 두고, 응답 DTO·DB 보관 범위·한도·실패 처리를 합의한 뒤 해당 capability를 켭니다. 위치·외부 서비스 전송 범위가 바뀌면 개인정보처리방침도 실제 동작과 맞춰 검토합니다.
 
 ## 검증과 남은 확인
 

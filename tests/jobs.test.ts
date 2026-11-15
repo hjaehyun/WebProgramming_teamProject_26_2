@@ -22,6 +22,7 @@ type Options = {
   finalWrite?: "ok" | "lost-response" | "rejected" | "pending";
   stateReadFails?: boolean;
   failureResponseLost?: boolean;
+  moodWriteFails?: boolean;
   beforeFailureWrite?: (row: Row, uploadedPath: string) => void;
 };
 
@@ -59,6 +60,8 @@ function storageAndDatabase(options: Options = {}) {
         if (options.stateReadFails) return { data: null, error: new Error("Network unavailable") };
         return { data: matches() ? { ...row } : null, error: null };
       }
+      // Before the artwork_songs migration the mood column does not exist.
+      if ("mood" in this.changes && options.moodWriteFails) return { data: null, error: new Error("column \"mood\" does not exist") };
       if (this.changes.status === "ready") {
         if (options.finalWrite === "pending") delayedFinalWrite = apply;
         else if (options.finalWrite !== "rejected") apply();
@@ -96,6 +99,25 @@ describe("artwork final-write reconciliation", () => {
     expect(await processOne()).toEqual({ processed: true, status: "ready" });
     expect(state.objects.has(state.row.image_path!)).toBe(true);
     expect(state.remove).not.toHaveBeenCalled();
+  });
+  test("a fresh summary stores its mood, and a database without the mood column still finishes the picture", async () => {
+    const summary = { title: "산책", summary: "공원을 걸었다.", image_prompt: "A park", tags: [], scene: "park", mood: "flutter" };
+    dependencies.summarize.mockResolvedValue(summary);
+    const state = storageAndDatabase(); state.row.image_prompt = null;
+    expect(await processOne()).toEqual({ processed: true, status: "ready" });
+    expect(state.row).toMatchObject({ mood: "flutter", scene: "park", status: "ready" });
+    const old = storageAndDatabase({ moodWriteFails: true }); old.row.image_prompt = null;
+    expect(await processOne()).toEqual({ processed: true, status: "ready" });
+    expect(old.row.status).toBe("ready"); expect(old.row).not.toHaveProperty("mood");
+    // A new summary with no clear mood clears the mood of the drawing it replaces.
+    dependencies.summarize.mockResolvedValue({ ...summary, mood: undefined });
+    const none = storageAndDatabase(); none.row.image_prompt = null; none.row.mood = "calm";
+    expect(await processOne()).toEqual({ processed: true, status: "ready" });
+    expect(none.row.mood).toBeNull();
+    // A resumed job (summary already saved) keeps what the first attempt stored.
+    const resumed = storageAndDatabase(); resumed.row.mood = "cozy";
+    expect(await processOne()).toEqual({ processed: true, status: "ready" });
+    expect(resumed.row.mood).toBe("cozy");
   });
   test("recognizes a committed ready row when only the response was lost", async () => {
     const state = storageAndDatabase({ finalWrite: "lost-response" });

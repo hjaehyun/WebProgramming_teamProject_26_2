@@ -9,7 +9,8 @@
 // the iframe (or a YouTube thumbnail) before the press.
 //
 // Props: song ({ id, videoId, title, channel } or null), readOnly, dark, busy, liked,
-// note (a short status line, e.g. "다른 곡이 아직 없어요"), onReroll, onLike, onRequest.
+// note (a short status line, e.g. "다른 곡이 아직 없어요", or "노래 추천 없음" after a request that
+// found nothing for this picture), onReroll, onLike, onRequest, available (the feature is on).
 
 import { useState } from "react";
 import { isMockVideo } from "@/lib/mockSong";
@@ -25,7 +26,7 @@ export default function SongCard({ song, readOnly, dark, busy, liked, note, onRe
     return (
       <section className={cls} aria-label="오늘의 노래">
         <h2 className={s.h}>오늘의 노래</h2>
-        <p className={s.empty}>{available ? "아직 노래가 없어요." : "노래 추천 연결 준비 중이에요."}</p>
+        <p className={s.empty} role="status">{available ? note || "아직 노래가 없어요." : "노래 추천 연결 준비 중이에요."}</p>
         <button className="btn ghost" onClick={onRequest} disabled={busy || !available}>
           {busy ? "찾는 중…" : "노래 추천받기"}
         </button>

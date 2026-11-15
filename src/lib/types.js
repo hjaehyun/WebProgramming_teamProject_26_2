@@ -62,8 +62,8 @@
  * @property {number} attempts 그림별 총 작업 선점 횟수. 다시 그리기 포함 최대 3회.
  * @property {string|null} requestId 마지막 그림 요청 UUID. 본인 응답에만 포함.
  * @property {boolean} canRetry attempts < 3이고 status가 failed 또는 ready인 경우.
- * @property {null} song 음악 API 미연결.
- * @property {null} mood 음악 연동용 분석 미연결.
+ * @property {Song|null} song 그림에 붙인 YouTube 곡. 아직 고르지 않았거나 기능이 꺼져 있으면 null.
+ * @property {null} mood 항상 null. 곡을 고르는 분위기는 서버 DB에만 있음. AI가 분위기를 정하지 못한 그림은 노래 요청 응답의 song이 null ("노래 추천 없음").
  */
 
 /**
@@ -78,7 +78,7 @@
 /**
  * @typedef {Object} Capabilities
  * @property {boolean} weather 서버에 KMA_SERVICE_KEY가 있을 때만 true. false면 위치 수집·전송하지 않음.
- * @property {boolean} music 현재 false. 음악 변경 API는 501.
+ * @property {boolean} music 서버에 YOUTUBE_API_KEY가 있고 노래 마이그레이션이 적용됐을 때만 true. false면 음악 API는 501.
  */
 
 /**
@@ -153,13 +153,15 @@
  * @property {string|null} imageUrl /api/exhibitions/[id]/images/[date]; 매 요청 접근 재검사.
  * @property {string} summary
  * @property {string|null} note DB exhibition_items.caption의 화면용 이름.
- * @property {null} song 음악 API 미연결.
+ * @property {{videoId:string,title:string,channel:string}|null} song 그림에 붙인 곡 (id 없음).
  */
 
 /**
- * 다른 API 담당자와 협의할 음악 카드 후보 형태. 현재 서버 응답이나 DB 테이블 계약이 아님.
+ * 그림에 붙인 YouTube 곡 (공용 song_pool의 한 행). 분위기별로 직접 고른 목록(src/server/song-list.ts)에서 나옴.
+ * POST /api/me/artworks/[date]/song {reroll?} -> {song: Song|null, unchanged: boolean}
+ * POST /api/me/songs/[id]/feedback {vote: 1|-1} -> {ok: true}
  * @typedef {Object} Song
- * @property {number} id
+ * @property {number} id song_pool id. 좋아요 요청에 사용.
  * @property {string} videoId
  * @property {string} title
  * @property {string} channel
