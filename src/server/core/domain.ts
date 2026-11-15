@@ -8,6 +8,9 @@ export const styles = {
   story: { label: "동화책", prompt: "Cozy storybook illustration, gentle shapes, warm light, soft painterly texture" }
 } as const;
 export type Style = keyof typeof styles;
+/** Atmosphere of a day's scene; decides which song list a picture draws from. */
+export const moods = ["calm", "cozy", "lively", "lonely", "flutter", "dreamy"] as const;
+export type Mood = (typeof moods)[number];
 export const entrySchema = z.object({ content: z.string().trim().min(1, "한 글자 이상 남겨 주세요.").max(500, "조각글은 500자까지 쓸 수 있어요.") });
 export const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((v) => {
   const d = new Date(v + "T00:00:00Z");

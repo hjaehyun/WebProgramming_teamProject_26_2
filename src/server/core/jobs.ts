@@ -14,11 +14,16 @@ export async function processOne(id?: string) {
   const path = `${job.user_id}/${job.id}/${job.claim_token}.png`;
   let uploaded = false;
   try {
-    const scene = job.image_prompt && job.scene_summary && job.title
-      ? { image_prompt: job.image_prompt, summary: job.scene_summary, title: job.title, tags: job.tags ?? [], scene: job.scene ?? "day" }
+    const resumed = Boolean(job.image_prompt && job.scene_summary && job.title);
+    const scene = resumed
+      ? { image_prompt: job.image_prompt, summary: job.scene_summary, title: job.title, tags: job.tags ?? [], scene: job.scene ?? "day", mood: undefined }
       : await summarize(job.entry_snapshot, job.art_style as Style);
     const checkpoint = await db.from("daily_artworks").update({ title: scene.title, scene_summary: scene.summary, image_prompt: scene.image_prompt, tags: scene.tags ?? [], scene: scene.scene ?? "day" }).eq("id", job.id).eq("claim_token", job.claim_token).eq("status", "processing").select("id").single();
     if (checkpoint.error) throw checkpoint.error;
+    // The mood only chooses the song list. Its column exists after the artwork_songs migration, so this
+    // write is separate and never fails the picture. A new summary without a clear mood stores NULL
+    // (no song recommendation), which also clears the mood of the drawing it replaces.
+    if (!resumed) try { await db.from("daily_artworks").update({ mood: scene.mood ?? null }).eq("id", job.id).eq("claim_token", job.claim_token).eq("status", "processing").select("id").maybeSingle(); } catch { /* no mood: no song recommendation */ }
     const png = await illustrate(scene.image_prompt);
     const { error: uploadError } = await db.storage.from("artworks").upload(path, png, { contentType: "image/png", upsert: false });
     if (uploadError) throw uploadError;

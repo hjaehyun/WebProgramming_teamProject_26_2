@@ -3,6 +3,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { HttpError } from "./request";
 import { accountInfo } from "./oauth";
 import { weatherEnabled } from "./weather";
+import { musicEnabled } from "./music";
 
 export type Row = Record<string, any>;
 export const artworkColumns = "id,user_id,artwork_date,status,art_style,title,scene_summary,image_prompt,image_path,scene,tags,error_message,attempts,last_request_id";
@@ -14,12 +15,35 @@ export function entryView(row: Row) {
   const weather = row.weather_code && row.temp_c != null ? { weather: row.weather_code, tempC: Number(row.temp_c) } : null;
   return { id: row.id, at: row.created_at, text: row.content, weather };
 }
-export function artworkView(row: Row, entries: Row[], imageUrl: string | null) {
+export function songView(row: Row | null | undefined) {
+  return row ? { id: row.id, videoId: row.video_id, title: row.title, channel: row.channel } : null;
+}
+/**
+ * Songs attached to pictures, keyed by artwork id. Read separately from the artworks and never fatal:
+ * with the feature off, or before the artwork_songs migration, pictures simply have no song (ok=false).
+ * The scope is explicit because it is the access check: "own" relies on RLS and is only for a signed-in
+ * user's client; the admin client bypasses RLS, so it must always be given the artwork ids it may read.
+ */
+export async function artworkSongs(db: SupabaseClient, scope: "own" | string[]) {
+  const songs = new Map<string, NonNullable<ReturnType<typeof songView>>>();
+  const off = { songs: new Map() as typeof songs, ok: false };
+  const ids = scope === "own" ? null : scope;
+  if (!musicEnabled() || ids?.length === 0) return off;
+  for (let start = 0; ; start += 1000) {
+    let query = db.from("artwork_songs").select("artwork_id,song:song_pool(id,video_id,title,channel)");
+    if (ids) query = query.in("artwork_id", ids);
+    const r = await query.order("artwork_id").range(start, start + 999);
+    if (r.error) return off;
+    for (const row of (r.data ?? []) as Row[]) { const song = songView(row.song); if (song) songs.set(row.artwork_id, song); }
+    if ((r.data?.length ?? 0) < 1000) return { songs, ok: true };
+  }
+}
+export function artworkView(row: Row, entries: Row[], imageUrl: string | null, song: ReturnType<typeof songView> = null) {
   return { id: row.id, date: row.artwork_date, scene: row.scene ?? "day", style: toStyle(row.art_style),
     summary: row.scene_summary ?? "", tags: row.tags ?? [], entries: entries.map(entryView), imageUrl, imageError: Boolean(row.image_path && !imageUrl),
     status: row.status, phase: row.status === "processing" ? (row.image_prompt ? "drawing" : "summarizing") : row.status,
     error: row.error_message, attempts: row.attempts, requestId: row.last_request_id ?? null,
-    canRetry: row.attempts < 3 && (row.status === "failed" || row.status === "ready"), song: null, mood: null };
+    canRetry: row.attempts < 3 && (row.status === "failed" || row.status === "ready"), song, mood: null };
 }
 export async function signImages(db: SupabaseClient, rows: Row[], ttl = 3600) {
   const paths = [...new Set(rows.map(r => r.image_path).filter(Boolean))] as string[];
@@ -37,7 +61,8 @@ export async function getArtwork(db: SupabaseClient, userId: string, date: strin
   if (!art.data) throw new HttpError(404, "그림을 찾을 수 없어요.");
   const urls = await signImages(db, [art.data]);
   if (art.data.image_path && !urls.get(art.data.image_path)) throw new HttpError(503,"그림 파일을 불러오지 못했어요. 잠시 후 다시 확인해 주세요.");
-  return artworkView(art.data, entries.data ?? [], urls.get(art.data.image_path) ?? null);
+  const { songs } = await artworkSongs(db, [art.data.id]);
+  return artworkView(art.data, entries.data ?? [], urls.get(art.data.image_path) ?? null, songs.get(art.data.id) ?? null);
 }
 async function allEntries(db: SupabaseClient, userId: string) {
   const rows: Row[] = [];
@@ -62,14 +87,15 @@ export async function dashboard(db: SupabaseClient, user: User, profile: Row) {
     account,profile:profileInfo,deletionPending:true,drafts:{},artworks:{},
     exhibition:{id:"",title:"나의 하루조각",desc:"",isPublic:false,dates:[]},capabilities:{weather:false,music:false},
   };
-  const [entries, art, ex] = await Promise.all([
+  const [entries, art, music, ex] = await Promise.all([
     allEntries(db,user.id),
     allArtworks(db,user.id),
+    artworkSongs(db, "own"),
     db.from("exhibitions").select("id,title,description,is_public").eq("user_id",user.id).order("created_at").order("id").limit(1).maybeSingle(),
   ]);
   if (ex.error) throw ex.error;
   const rows = art; const urls = await signImages(db,rows);
-  const artworks = Object.fromEntries(rows.map(a => [a.artwork_date,artworkView(a,entries.filter(e=>e.entry_date===a.artwork_date),urls.get(a.image_path)??null)]));
+  const artworks = Object.fromEntries(rows.map(a => [a.artwork_date,artworkView(a,entries.filter(e=>e.entry_date===a.artwork_date),urls.get(a.image_path)??null,music.songs.get(a.id)??null)]));
   const drafts: Record<string,Row[]> = {};
   for (const e of entries) if (!artworks[e.entry_date]) (drafts[e.entry_date] ??= []).push(entryView(e));
   let dates: string[] = [];
@@ -84,6 +110,6 @@ export async function dashboard(db: SupabaseClient, user: User, profile: Row) {
     deletionPending:false,
     drafts,artworks,
     exhibition: ex.data ? { id:ex.data.id,title:ex.data.title,desc:ex.data.description,isPublic:ex.data.is_public,dates } : {id:"",title:"나의 하루조각",desc:"",isPublic:false,dates:[]},
-    capabilities: { weather:weatherEnabled(),music:false },
+    capabilities: { weather:weatherEnabled(),music:music.ok },
   };
 }

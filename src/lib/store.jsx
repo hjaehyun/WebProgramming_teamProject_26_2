@@ -110,7 +110,7 @@ export function StoreProvider({ children }) {
     const version = sessionVersion.current;
     const r = await shareInflight(songRequests.current, date, () => trackWrite(() => api("POST", `/api/me/artworks/${encodeURIComponent(date)}/song`, { reroll })));
     if (version === sessionVersion.current) update(d => { const a = d.artworks[date]; return a ? { ...d, artworks: { ...d.artworks, [date]: { ...a, song: r.song } } } : d; });
-    return { unchanged: r.unchanged };
+    return { unchanged: r.unchanged, song: r.song };
   }, [update, trackWrite]);
   const value = useMemo(() => {
     const cur = db ?? createEmpty();

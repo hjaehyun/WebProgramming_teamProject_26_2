@@ -47,6 +47,19 @@ describe("AI connection settings", () => {
 });
 
 describe("AI response handling", () => {
+  test("asks for one of the six moods and drops anything else", async () => {
+    const answer = (mood: unknown) => Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ ...scene, mood }) }] }] });
+    fetchMock.mockResolvedValueOnce(answer("dreamy"));
+    await expect(summarize(entries, "watercolor")).resolves.toEqual({ ...scene, mood: "dreamy" });
+    const schema = JSON.parse(fetchMock.mock.calls[0][1]!.body as string).text.format.schema;
+    expect(schema.properties.mood.enum).toEqual(["calm", "cozy", "lively", "lonely", "flutter", "dreamy", "none"]);
+    expect(schema.required).toContain("mood");
+    // "none" (no clear mood) and anything unexpected both mean no mood.
+    for (const mood of ["none", "furious"]) {
+      fetchMock.mockResolvedValueOnce(answer(mood));
+      await expect(summarize(entries, "watercolor")).resolves.toEqual(scene);
+    }
+  });
   test("uses trimmed Luna settings and disables reasoning while preserving strict JSON output", async () => {
     fetchMock.mockResolvedValue(Response.json(successfulSummary()));
     await expect(summarize(entries, "watercolor")).resolves.toEqual(scene);

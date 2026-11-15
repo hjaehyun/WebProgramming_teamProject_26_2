@@ -17,7 +17,3 @@ export function artworkPost(request:Request) {return run(async()=>{
 export function artworkGet(date:string) {return run(async()=>{
   dateSchema.parse(date);const {db,user}=await authenticated();return json({artwork:await getArtwork(db,user.id,date)});
 });}
-export function unavailable(request:Request,kind:"music"|"weather") {return run(async()=>{
-  mutation(request);await authenticated();
-  throw new HttpError(501,kind==="music"?"노래 추천은 아직 연결 준비 중이에요.":"날씨 조회는 아직 연결 준비 중이에요.");
-});}

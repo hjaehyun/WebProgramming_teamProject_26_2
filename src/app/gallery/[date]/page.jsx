@@ -30,7 +30,7 @@ function Detail() {
   const [saving, setSaving] = useState(false);
   const [redrawing, setRedrawing] = useState(false);
   const [songBusy, setSongBusy] = useState(false);
-  const [songNote, setSongNote] = useState(null);
+  const [songNote, setSongNote] = useState(null); // { date, text }: shown only on the picture it belongs to
   const [liked, setLiked] = useState(null); // song id liked in this visit
 
   async function song(reroll) {
@@ -39,7 +39,9 @@ function Detail() {
     setSongNote(null);
     try {
       const r = await requestSong(date, reroll);
-      if (reroll && r.unchanged) setSongNote("다른 곡이 아직 없어요");
+      // No song after asking: the AI found no clear mood for this day (or it was drawn before moods existed).
+      if (!r.song) setSongNote({ date, text: "노래 추천 없음" });
+      else if (reroll && r.unchanged) setSongNote({ date, text: "다른 곡이 아직 없어요" });
     } catch (err) {
       alert(err instanceof Error ? err.message : "노래를 찾지 못했어요");
     } finally {
@@ -143,7 +145,7 @@ function Detail() {
           song={art.song}
           busy={songBusy || redrawing}
           liked={!!art.song && liked === art.song.id}
-          note={db.capabilities?.music ? songNote : "노래 추천 연결 준비 중"}
+          note={db.capabilities?.music ? (songNote?.date === date ? songNote.text : null) : "노래 추천 연결 준비 중"}
           onRequest={() => song(false)}
           onReroll={() => song(true)}
           onLike={() => art.song && like(art.song.id)}
