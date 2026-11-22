@@ -18,6 +18,8 @@ const forecast = (t: string, sky: string, pty: string) => Response.json({ respon
 const input = (extra = {}) => ({ date, entry: { id: entryId, text: "산책" }, ...extra });
 
 beforeEach(() => {
+  // `date` is today in Seoul: only today's fragments look up the weather.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-12T05:00:00Z") });
   vi.clearAllMocks(); fetchMock.mockReset(); vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("APP_URL", origin); vi.stubEnv("KMA_SERVICE_KEY", "test-key");
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -30,7 +32,7 @@ beforeEach(() => {
     rpc,
   });
 });
-afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("fragment weather through the entry API", () => {
   test("a fragment saved with a location gets the weather; coordinates are not passed to the database", async () => {
@@ -64,6 +66,14 @@ describe("fragment weather through the entry API", () => {
     const failedWrite = await post(input({ lat: 36.4, lon: 128.1 }));
     expect(failedWrite.status).toBe(200);
     expect(await failedWrite.json()).toMatchObject({ entry: { weather: null } });
+  });
+
+  test("a fragment added to a past day is saved without today's weather", async () => {
+    fetchMock.mockResolvedValue(forecast("7.4", "1", "1"));
+    const r = await post({ ...input({ lat: 35.1796, lon: 129.0756 }), date: "2026-11-11" });
+    expect(await r.json()).toMatchObject({ entry: { weather: null } });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(rpc.mock.calls).toEqual([["save_team_entry", { p_id: entryId, p_content: "산책", p_date: "2026-11-11" }]]);
   });
 
   test("a retried save keeps the weather already stored and does not look it up again", async () => {

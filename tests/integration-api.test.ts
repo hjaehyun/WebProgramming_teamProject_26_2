@@ -6,7 +6,7 @@ vi.mock("../src/server/core/jobs",()=>({processOne:mocks.processOne}));
 vi.mock("../src/server/core/ai",()=>({aiConfigured:mocks.aiConfigured}));
 vi.mock("../src/server/recovery",()=>({clearRecovery:mocks.clearRecovery,requireRecovery:mocks.requireRecovery}));
 import {auth,me,accountDelete,profilePut} from "../src/server/auth-handlers";
-import {entryPost} from "../src/server/entry-handlers";
+import {entryChange,entryPost} from "../src/server/entry-handlers";
 import {artworkPost} from "../src/server/artwork-handlers";
 import {exhibitionGet,exhibitionImageGet} from "../src/server/exhibition-handlers";
 import {body,run,json} from "../src/server/request";
@@ -136,6 +136,29 @@ describe("authenticated API boundaries",()=>{
     f.tables.exhibitions=[];
     const response=await me();const data=await response.json();
     expect(Object.keys(data.artworks)).toHaveLength(1001);expect(data.artworks["saved-day-1000"].entries).toHaveLength(1);expect(data.drafts).toEqual({});
+  });
+  test("a picture reports whether its fragments changed since drawing, without exposing the snapshot",async()=>{
+    f.tables.daily_artworks[0].entry_snapshot=[{content:"내 기록",created_at:"2026-11-11T00:00:00+00:00"}];
+    let data=await (await me()).json();
+    expect(data.artworks[date].entriesChanged).toBe(false);expect(JSON.stringify(data)).not.toContain("entry_snapshot");
+    f.tables.daily_artworks[0].entry_snapshot=[{content:"예전 기록"}];
+    data=await (await me()).json();expect(data.artworks[date].entriesChanged).toBe(true);
+  });
+  test("removing a day's last fragment also deletes that picture's files",async()=>{
+    const remove=()=>entryChange(new Request(origin+`/api/me/entries/${entryId}`,{method:"DELETE",headers:{Origin:origin}}),entryId,true);
+    const r=await remove();
+    expect(r.status).toBe(200);expect(await r.json()).toEqual({ok:true,artworkRemoved:true});
+    expect(f.db.rpc).toHaveBeenCalledWith("remove_team_entry",{p_id:entryId});
+    expect(f.bucket.list).toHaveBeenCalledWith(`${alice}/${artworkId}`,{limit:1000});
+    expect(f.bucket.remove).toHaveBeenCalledWith([`${alice}/${artworkId}/image.png`]);
+    // Another fragment remains: the picture and its files stay.
+    vi.clearAllMocks();f.db.rpc.mockResolvedValueOnce({data:null,error:null} as never);
+    expect(await (await remove()).json()).toEqual({ok:true,artworkRemoved:false});expect(f.bucket.list).not.toHaveBeenCalled();
+    // The picture row is already gone, so a storage failure must not turn the removal into an error.
+    const logged=vi.spyOn(console,"error").mockImplementation(()=>{});
+    f.bucket.remove.mockResolvedValue({data:[],error:new Error("Storage temporarily unavailable")});
+    const failed=await remove();expect(failed.status).toBe(200);expect(await failed.json()).toEqual({ok:true,artworkRemoved:true});
+    expect(logged).toHaveBeenCalledWith("Artwork file cleanup deferred",{id:artworkId});logged.mockRestore();
   });
   test("file cleanup failure keeps the account and exposes a retryable deletion state",async()=>{
     f.bucket.remove.mockResolvedValue({data:[],error:new Error("Storage temporarily unavailable")});

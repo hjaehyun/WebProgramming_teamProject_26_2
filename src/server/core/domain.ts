@@ -16,6 +16,16 @@ export const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((v) => 
   const d = new Date(v + "T00:00:00Z");
   return !Number.isNaN(d.valueOf()) && d.toISOString().slice(0, 10) === v;
 }, "날짜를 확인해 주세요.");
+/**
+ * Whether a day's fragments differ from the snapshot its picture was drawn from. Compared by text as a
+ * multiset: order and timestamps are ignored, and text edited back to the original counts as unchanged.
+ */
+export function entriesChanged(snapshot: unknown, contents: string[]) {
+  if (!Array.isArray(snapshot)) return false;
+  const drawn = snapshot.map((e) => String((e as { content?: unknown } | null)?.content ?? "")).sort();
+  const now = [...contents].sort();
+  return drawn.length !== now.length || drawn.some((text, i) => text !== now[i]);
+}
 export function seoulDate(now = new Date()) {
   return new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
