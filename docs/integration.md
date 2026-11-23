@@ -88,7 +88,7 @@ npm run dev
 
 Cron 호출 URL은 `https://harujogak-hihellow18.vercel.app/api/jobs` 그대로여서 별도 SQL 변경 없이 새 handler를 사용합니다. 20:12:18(KST)의 DB 확인에서는 활성 1분 Cron 1개·`enabled=true`·마지막 tick 20:12 `idle`, 대기·처리 중·전송 중·실패·중복 건수 0, 프로필 1개·조각글 5개·완성 그림 3개를 확인했습니다. 이 배포 점검 시점에는 SMTP·OAuth 설정을 변경하지 않았으며, Gmail SMTP 전환은 이후 작업입니다.
 
-**`20261120064000_edit_finished_days.sql`(그림 있는 날의 조각글 변경)은 아직 어느 DB에도 적용하지 않았습니다.** **반드시 이 파일을 먼저 적용한 뒤 코드를 배포합니다.** 코드가 먼저 나가면 삭제 API가 아직 없는 `remove_team_entry`를 불러 오늘 조각글 삭제까지 `503`으로 실패하고, 지난 날 추가·수정은 기존 규칙대로 `409`로 거부됩니다. 이 파일은 `save_team_entry`·`edit_entry`·`request_team_artwork`·`close_day_for`를 같은 시그니처로 교체하고 `remove_team_entry` 함수와 `deleted_artwork_attempts` 표를 추가합니다. 기존 행은 바꾸지 않습니다. 노래 마이그레이션이 없는 DB에도 적용할 수 있습니다.
+**`20261120064000_edit_finished_days.sql`(그림 있는 날의 조각글 변경)은 2026-11-23 오전(KST) 운영 DB에 SQL Editor로 적용했습니다.** 실행한 SQL이 이 파일과 바이트 단위로 같은지 SHA-256으로 대조했고, 원격 마이그레이션 이력(`db push`)에는 등록하지 않았습니다. 적용 후 새 표(RLS 켜짐, 클라이언트 직접 조회 불가)·새 함수(로그인 사용자만 실행)·교체된 함수 4개와 기존 권한, 행 수 유지(`profiles` 7, `entries` 30, `daily_artworks` 13), 이후 1분 Cron 실행 성공을 확인했습니다. 지금 배포된 이전 코드와도 호환됩니다. 이 파일이 없는 다른 DB에서는 **반드시 이 파일을 먼저 적용한 뒤 코드를 배포합니다.** 코드가 먼저 나가면 삭제 API가 아직 없는 `remove_team_entry`를 불러 오늘 조각글 삭제까지 `503`으로 실패하고, 지난 날 추가·수정은 기존 규칙대로 `409`로 거부됩니다. 이 파일은 `save_team_entry`·`edit_entry`·`request_team_artwork`·`close_day_for`를 같은 시그니처로 교체하고 `remove_team_entry` 함수와 `deleted_artwork_attempts` 표를 추가합니다. 기존 행은 바꾸지 않습니다. 노래 마이그레이션이 없는 DB에도 적용할 수 있습니다.
 
 새 worker는 `crayon`·`story`를 포함한 그림체를 지원하며, 운영에서 크레파스 재생성·동화책 자동 생성·색연필 생성과 PNG 다운로드를 실제 확인했습니다. 만료 선점 복구는 과거 날짜 시험 자료와 의도적으로 오래된 선점을 사용했으며, 실제 자정 통과·프로세스 강제 종료 시험은 아닙니다. 이전 배포로 복구할 때는 현재 DB와 새 그림체에 대한 호환성을 함께 확인합니다.
 
