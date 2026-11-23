@@ -64,7 +64,7 @@
  * @property {boolean} canRetry attempts < 3이고 status가 failed 또는 ready인 경우.
  * @property {boolean} entriesChanged 그림을 그린 뒤 조각글이 더해지거나 고쳐지거나 지워짐(글 내용 기준 비교). 다시 그리기는 지금의 조각글로 그림.
  * @property {Song|null} song 그림에 붙인 YouTube 곡. 아직 고르지 않았거나 기능이 꺼져 있으면 null.
- * @property {null} mood 항상 null. 곡을 고르는 분위기는 서버 DB에만 있음. AI가 분위기를 정하지 못한 그림은 노래 요청 응답의 song이 null ("노래 추천 없음").
+ * @property {null} mood 항상 null. 곡을 고르는 분위기는 서버 DB에만 있음. 저장된 분위기가 없는 그림은 노래 요청 시 기본 calm 목록을 사용함.
  */
 
 /**
