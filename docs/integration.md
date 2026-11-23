@@ -88,6 +88,8 @@ npm run dev
 
 Cron 호출 URL은 `https://harujogak-hihellow18.vercel.app/api/jobs` 그대로여서 별도 SQL 변경 없이 새 handler를 사용합니다. 20:12:18(KST)의 DB 확인에서는 활성 1분 Cron 1개·`enabled=true`·마지막 tick 20:12 `idle`, 대기·처리 중·전송 중·실패·중복 건수 0, 프로필 1개·조각글 5개·완성 그림 3개를 확인했습니다. 이 배포 점검 시점에는 SMTP·OAuth 설정을 변경하지 않았으며, Gmail SMTP 전환은 이후 작업입니다.
 
+**`20261120064000_edit_finished_days.sql`(그림 있는 날의 조각글 변경)은 아직 어느 DB에도 적용하지 않았습니다.** **반드시 이 파일을 먼저 적용한 뒤 코드를 배포합니다.** 코드가 먼저 나가면 삭제 API가 아직 없는 `remove_team_entry`를 불러 오늘 조각글 삭제까지 `503`으로 실패하고, 지난 날 추가·수정은 기존 규칙대로 `409`로 거부됩니다. 이 파일은 `save_team_entry`·`edit_entry`·`request_team_artwork`·`close_day_for`를 같은 시그니처로 교체하고 `remove_team_entry` 함수와 `deleted_artwork_attempts` 표를 추가합니다. 기존 행은 바꾸지 않습니다. 노래 마이그레이션이 없는 DB에도 적용할 수 있습니다.
+
 새 worker는 `crayon`·`story`를 포함한 그림체를 지원하며, 운영에서 크레파스 재생성·동화책 자동 생성·색연필 생성과 PNG 다운로드를 실제 확인했습니다. 만료 선점 복구는 과거 날짜 시험 자료와 의도적으로 오래된 선점을 사용했으며, 실제 자정 통과·프로세스 강제 종료 시험은 아닙니다. 이전 배포로 복구할 때는 현재 DB와 새 그림체에 대한 호환성을 함께 확인합니다.
 
 ## 인증과 메일
@@ -129,9 +131,9 @@ JSON 변경 요청은 `Content-Type: application/json`과 동일 origin을 사�
 | `PUT /api/me/profile` | `{nick,style,consent}` | `{ok:true}`; `consent` 필수 boolean |
 | `PUT /api/me/password` | `{current,next}` | `{ok:true}`; 이메일 계정만 지원 |
 | `DELETE /api/me` | 이메일 `{password}`, 소셜 `{confirm:"탈퇴"}` | 정리 완료 시 `{ok:true}` |
-| `POST /api/me/entries` | `{date,entry:{id,text}}` | `{entry:Entry}`; `id`는 UUID |
+| `POST /api/me/entries` | `{date,entry:{id,text}}` | `{entry:Entry}`; `id`는 UUID. `date`는 오늘 또는 그림이 있는 지난 날 |
 | `PATCH /api/me/entries/[id]` | `{text}` | `{ok:true}` |
-| `DELETE /api/me/entries/[id]` | 본문 없음 | `{ok:true}` |
+| `DELETE /api/me/entries/[id]` | 본문 없음 | `{ok:true,artworkRemoved}`; 그림 있는 날의 마지막 조각글이면 그림도 삭제 |
 | `POST /api/artworks` | `{date,redraw?,requestId}` | `{artwork:Artwork}`; UUID `requestId` 필수 |
 | `GET /api/artworks/[date]` | 없음 | `{artwork:Artwork}` |
 | `PATCH /api/me/exhibition` | `{dates?,isPublic?}` 중 하나 이상 | `{ok:true,id}` |
@@ -148,7 +150,9 @@ JSON 변경 요청은 `Content-Type: application/json`과 동일 origin을 사�
 
 ## 저장·생성·공개 동작
 
-조각글은 서울 날짜 기준 오늘에만 작성·수정하며, 1~500자·하루 30개 제한과 마감 후 변경 금지를 DB에서도 검사합니다. 작성 시각은 서버 값을 사용하고 클라이언트의 사용자 ID·위치·시각을 신뢰하지 않습니다. 프론트는 저장·수정·삭제의 진행을 기다린 뒤 그림 생성을 요청합니다. 저장이 실패한 채 그림 생성을 성공으로 진행하지 않습니다.
+조각글은 서울 날짜 기준 오늘, 또는 그림이 이미 있는(`ready`·`failed`) 지난 날에 작성·수정·삭제합니다. 그림을 그리는 중(`queued`·`processing`)인 날, 그림 없는 지난 날, 미래 날짜는 거부합니다. 1~500자·하루 30개 제한도 DB에서 검사합니다. 작성 시각은 서버 값을 사용하고 클라이언트의 사용자 ID·위치·시각을 신뢰하지 않으므로, 지난 날에 더한 조각글의 `at`은 더한 날의 시각이며 화면은 "M/D 더함"으로 표시합니다. 날씨는 오늘 조각글에만 붙습니다. 프론트는 저장·수정·삭제의 진행을 기다린 뒤 그림 생성을 요청합니다. 저장이 실패한 채 그림 생성을 성공으로 진행하지 않습니다.
+
+그림이 있는 날의 조각글을 바꿔도 그림은 자동으로 다시 그리지 않습니다. `Artwork.entriesChanged`가 그림을 그린 조각글과 지금 조각글의 차이(글 내용 기준)를 알리고, 갤러리 상세에서 "다시 그리기"를 누르면 그 시점의 조각글을 다시 읽어 그립니다(남은 시도 안에서). 실패한 그림을 재시도할 때도 조각글이 바뀌었으면 저장된 프롬프트를 버리고 다시 요약합니다. 마지막 조각글을 지우면 그 날 그림과 전시 항목·노래 연결이 함께 삭제되고, 서버가 해당 그림의 Storage 폴더를 지웁니다(실패해도 응답은 성공, 탈퇴 정리 때 다시 지움). 그 날의 사용한 시도 횟수는 `deleted_artwork_attempts`에 남아, 오늘 다시 써서 마감해도 3회 한도를 넘지 않습니다.
 
 그림 `status`는 `queued → processing → ready` 또는 `failed`입니다. 화면용 `phase`는 처리 중 `summarizing`·`drawing`을 구분합니다. `202`는 대기·처리 중이며, `200`에도 `failed`가 올 수 있으므로 **HTTP 성공만으로 그림 완성을 판단하지 않습니다.** 네트워크·서버 응답 유실 시 같은 날짜를 조회하되 `requestId`가 일치하는 결과만 이번 요청으로 해석합니다. 명시적인 `4xx` 오류를 과거 그림으로 덮지 않습니다.
 

@@ -5,6 +5,7 @@ import { shareInflight } from "./inflight";
 import { createMutationQueue } from "./mutation-queue";
 import { createSnapshotSync } from "./snapshot-sync";
 import { nextExhibitionDates } from "./exhibition-selection";
+import { todayKey } from "./date";
 
 const Ctx = createContext(null);
 class ApiError extends Error {
@@ -15,6 +16,13 @@ async function api(method, url, body) {
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(res.status, data?.error ?? "요청을 완료하지 못했어요.");
   return data;
+}
+// A day's fragments live in drafts until the day has a picture, then in that picture's entries.
+// Changing a pictured day marks it changed at once; the next dashboard read has the server's verdict.
+function withEntries(d, date, fn) {
+  const a = d.artworks[date];
+  if (a) return { ...d, artworks: { ...d.artworks, [date]: { ...a, entries: fn(a.entries), entriesChanged: true } } };
+  return { ...d, drafts: { ...d.drafts, [date]: fn(d.drafts[date] ?? []) } };
 }
 function createEmpty() {
   return { account: null, profile: null, drafts: {}, artworks: {}, exhibition: { id: "", title: "나의 하루조각", desc: "", isPublic: false, dates: [] }, capabilities: { music: false, weather: false }, deletionPending: false };
@@ -117,6 +125,15 @@ export function StoreProvider({ children }) {
     const version = sessionVersion.current;
     const updateThisSession = fn => { if (version === sessionVersion.current) update(fn); };
     const requireThisSession = () => { if (version !== sessionVersion.current) throw new Error("로그인 상태가 바뀌었어요. 다시 확인해 주세요."); };
+    // Each fragment's writes are serialized; errors are reported (alert + refresh) by report().
+    // A pictured day is re-read after a successful write: entriesChanged, or the picture being gone.
+    const writeEntry = (date, id, operation) => {
+      const pictured = !!cur.artworks[date];
+      const saving = trackWrite(() => pendingEntries.current.enqueue(id, async () => { requireThisSession(); return operation(); }));
+      report(saving);
+      if (pictured) saving.then(() => { if (version === sessionVersion.current) void refresh(); }, () => {});
+      return saving;
+    };
     return {
       ready: db !== null, authed, error, db: cur, refresh, exhibitionSaving,
       applyArtwork: a => { if (version === sessionVersion.current) applyArtwork(a); },
@@ -137,25 +154,28 @@ export function StoreProvider({ children }) {
         newSession(); setDb(createEmpty()); setAuthed(false); setError(null);
       },
       setProfile: async p => { await trackWrite(() => api("PUT", "/api/me/profile", p)); updateThisSession(d => ({ ...d, profile: p })); },
+      /** Today, or a past day that already has a picture. */
       addEntry: (date, text) => {
         const entry = { id: crypto.randomUUID(), at: new Date().toISOString(), text };
-        update(d => ({ ...d, drafts: { ...d.drafts, [date]: [...(d.drafts[date] ?? []), entry] } }));
-        const saving = trackWrite(() => pendingEntries.current.enqueue(entry.id, async () => {
-          const coords = cur.capabilities?.weather ? await getCoarseCoords() : null;
+        update(d => withEntries(d, date, list => [...list, entry]));
+        writeEntry(date, entry.id, async () => {
+          // The weather right now only describes a fragment written today.
+          const coords = cur.capabilities?.weather && date === todayKey() ? await getCoarseCoords() : null;
           requireThisSession();
           const r = await api("POST", "/api/me/entries", { date, entry, ...(coords ?? {}) });
-          updateThisSession(d => ({ ...d, drafts: { ...d.drafts, [date]: (d.drafts[date] ?? []).map(e => e.id === entry.id ? { ...r.entry, text: e.text === entry.text ? r.entry.text : e.text } : e) } }));
-        }));
-        report(saving); return entry;
+          updateThisSession(d => withEntries(d, date, list => list.map(e => e.id === entry.id ? { ...r.entry, text: e.text === entry.text ? r.entry.text : e.text } : e)));
+        });
+        return entry;
       },
       flushEntries: () => pendingEntries.current.flush(),
       editEntry: (date, id, text) => {
-        update(d => ({ ...d, drafts: { ...d.drafts, [date]: (d.drafts[date] ?? []).map(e => e.id === id ? { ...e, text } : e) } }));
-        report(trackWrite(() => pendingEntries.current.enqueue(id, () => { requireThisSession(); return api("PATCH", `/api/me/entries/${encodeURIComponent(id)}`, { text }); })));
+        update(d => withEntries(d, date, list => list.map(e => e.id === id ? { ...e, text } : e)));
+        return writeEntry(date, id, () => api("PATCH", `/api/me/entries/${encodeURIComponent(id)}`, { text }));
       },
+      /** Resolves to { artworkRemoved }: true when the day's last fragment took its picture with it. */
       removeEntry: (date, id) => {
-        update(d => ({ ...d, drafts: { ...d.drafts, [date]: (d.drafts[date] ?? []).filter(e => e.id !== id) } }));
-        report(trackWrite(() => pendingEntries.current.enqueue(id, () => { requireThisSession(); return api("DELETE", `/api/me/entries/${encodeURIComponent(id)}`); })));
+        update(d => withEntries(d, date, list => list.filter(e => e.id !== id)));
+        return writeEntry(date, id, () => api("DELETE", `/api/me/entries/${encodeURIComponent(id)}`));
       },
       requestSong,
       voteSong: async (songId, vote) => { await api("POST", `/api/me/songs/${songId}/feedback`, { vote }); },

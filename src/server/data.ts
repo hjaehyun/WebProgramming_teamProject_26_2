@@ -4,9 +4,11 @@ import { HttpError } from "./request";
 import { accountInfo } from "./oauth";
 import { weatherEnabled } from "./weather";
 import { musicEnabled } from "./music";
+import { entriesChanged } from "./core/domain";
 
 export type Row = Record<string, any>;
-export const artworkColumns = "id,user_id,artwork_date,status,art_style,title,scene_summary,image_prompt,image_path,scene,tags,error_message,attempts,last_request_id";
+// entry_snapshot is read only to compute entriesChanged; it never goes into a response.
+export const artworkColumns = "id,user_id,artwork_date,status,art_style,title,scene_summary,image_prompt,image_path,scene,tags,error_message,attempts,last_request_id,entry_snapshot";
 export function toStyle(style: string) { return style === "watercolor" ? "water" : style; }
 export function fromStyle(style: string) { return style === "water" ? "watercolor" : style; }
 // The weather columns exist only after the entry_weather migration, so they are selected only when the feature is on.
@@ -43,7 +45,8 @@ export function artworkView(row: Row, entries: Row[], imageUrl: string | null, s
     summary: row.scene_summary ?? "", tags: row.tags ?? [], entries: entries.map(entryView), imageUrl, imageError: Boolean(row.image_path && !imageUrl),
     status: row.status, phase: row.status === "processing" ? (row.image_prompt ? "drawing" : "summarizing") : row.status,
     error: row.error_message, attempts: row.attempts, requestId: row.last_request_id ?? null,
-    canRetry: row.attempts < 3 && (row.status === "failed" || row.status === "ready"), song, mood: null };
+    canRetry: row.attempts < 3 && (row.status === "failed" || row.status === "ready"),
+    entriesChanged: entriesChanged(row.entry_snapshot, entries.map(e => e.content)), song, mood: null };
 }
 export async function signImages(db: SupabaseClient, rows: Row[], ttl = 3600) {
   const paths = [...new Set(rows.map(r => r.image_path).filter(Boolean))] as string[];

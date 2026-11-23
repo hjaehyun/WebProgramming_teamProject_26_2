@@ -11,8 +11,13 @@ export function fromKey(key) {
   return new Date(y, m - 1, d);
 }
 
+/** Seoul calendar day of a timestamp: "2026-11-20". */
+export function dateKeyOf(iso) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+}
+
 export function todayKey() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return dateKeyOf(new Date());
 }
 
 export function addDays(key, n) {

@@ -62,6 +62,7 @@
  * @property {number} attempts 그림별 총 작업 선점 횟수. 다시 그리기 포함 최대 3회.
  * @property {string|null} requestId 마지막 그림 요청 UUID. 본인 응답에만 포함.
  * @property {boolean} canRetry attempts < 3이고 status가 failed 또는 ready인 경우.
+ * @property {boolean} entriesChanged 그림을 그린 뒤 조각글이 더해지거나 고쳐지거나 지워짐(글 내용 기준 비교). 다시 그리기는 지금의 조각글로 그림.
  * @property {Song|null} song 그림에 붙인 YouTube 곡. 아직 고르지 않았거나 기능이 꺼져 있으면 null.
  * @property {null} mood 항상 null. 곡을 고르는 분위기는 서버 DB에만 있음. AI가 분위기를 정하지 못한 그림은 노래 요청 응답의 song이 null ("노래 추천 없음").
  */
@@ -96,8 +97,10 @@
 /**
  * POST /api/me/entries. at/weather/사용자 ID는 입력 계약에 없음.
  * capabilities.weather가 true이고 위치를 허용하면 소수점 2자리로 줄인 lat, lon을 함께 보냄 (날씨 조회에만 쓰고 저장하지 않음).
+ * 오늘 날짜에만 보내며, 지난 날에 더한 조각글은 날씨 없이 저장.
+ * 수정(PATCH /api/me/entries/[id])·삭제(DELETE)도 같은 날짜 규칙. 삭제 응답 {ok, artworkRemoved}: 그림 있는 날의 마지막 조각글이면 그림도 삭제.
  * @typedef {Object} CreateEntryInput
- * @property {DateKey} date
+ * @property {DateKey} date 오늘, 또는 그림이 ready/failed인 지난 날. 그림을 그리는 중(queued/processing)인 날은 409.
  * @property {{id:string,text:string}} entry id는 UUID, text는 1~500자.
  */
 

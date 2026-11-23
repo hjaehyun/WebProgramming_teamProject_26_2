@@ -1,5 +1,20 @@
 import { describe, expect, test } from "vitest";
-import { dateSchema, entrySchema, seoulDate, seoulTime, displayDate } from "../src/server/core/domain";
+import { dateSchema, entriesChanged, entrySchema, seoulDate, seoulTime, displayDate } from "../src/server/core/domain";
+describe("fragments changed since the picture was drawn", () => {
+  const snapshot = [{ content: "산책", created_at: "2026-11-19T01:00:00+00:00" }, { content: "비", created_at: "2026-11-19T02:00:00+00:00" }];
+  test("compares the texts only, in any order", () => {
+    expect(entriesChanged(snapshot, ["비", "산책"])).toBe(false);
+    expect(entriesChanged(snapshot, ["산책"])).toBe(true);
+    expect(entriesChanged(snapshot, ["산책", "비", "더한 기록"])).toBe(true);
+    expect(entriesChanged(snapshot, ["산책", "눈"])).toBe(true);
+    expect(entriesChanged([{ content: "비" }, { content: "비" }], ["비", "산책"])).toBe(true);
+  });
+  test("a missing or malformed snapshot never claims a change", () => {
+    expect(entriesChanged(undefined, ["산책"])).toBe(false);
+    expect(entriesChanged(null, [])).toBe(false);
+    expect(entriesChanged([], [])).toBe(false);
+  });
+});
 describe("Korea day boundaries and journal validation", () => {
   test("midnight rolls at 15:00 UTC", () => {
     expect(seoulDate(new Date("2026-11-03T14:59:59Z"))).toBe("2026-11-03");
