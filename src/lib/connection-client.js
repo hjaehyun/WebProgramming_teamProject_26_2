@@ -10,10 +10,10 @@ const emptyView = () => ({ payload: null, error: null, loading: true, posting: f
 // a new POST; visiting, polling and returning to a tab never approve generation.
 export function createConnectionSession({ date, beforeStart, onChange }) {
   let live = true, busy = false, timer, controller, current = null, uncertain = null;
-  const schedule = () => {
+  const schedule = (retryRead = false) => {
     clearTimeout(timer);
     if (!live || document.hidden) return;
-    if (working(current?.connection)) timer = setTimeout(() => request("GET"), 5000);
+    if (working(current?.connection) || retryRead) timer = setTimeout(() => request("GET"), 5000);
     else {
       const delay = new Date(current?.retryAt).getTime() - Date.now();
       if (delay > 0) timer = setTimeout(() => request("GET"), Math.min(delay + 250, 2147483647));
@@ -23,7 +23,7 @@ export function createConnectionSession({ date, beforeStart, onChange }) {
     if (!live || busy) return;
     busy = true;
     clearTimeout(timer);
-    let timeout, checkAfterPost = false;
+    let timeout, checkAfterPost = false, retryRead = false, transientReadError = true, readRejected = false;
     if (method === "POST") onChange(previous => ({ ...previous, posting: true, error: null }));
     try {
       if (method === "POST") {
@@ -39,7 +39,12 @@ export function createConnectionSession({ date, beforeStart, onChange }) {
         method, cache: "no-store", signal: controller.signal,
         ...(method === "POST" ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, refresh: regenerate, requestId: uncertain.requestId }) } : {}),
       });
-      const data = await response.json().catch(() => null);
+      transientReadError = response.status >= 500 || response.status === 408 || response.status === 429;
+      readRejected = method === "GET" && !response.ok && !transientReadError;
+      const data = await response.json().catch(() => {
+        if (response.ok) transientReadError = true;
+        return null;
+      });
       if (!response.ok) {
         // A definite rejection did not enqueue this request. A network/5xx failure
         // may have, so retain its id for an explicit retry after checking status.
@@ -57,13 +62,16 @@ export function createConnectionSession({ date, beforeStart, onChange }) {
       if (live) {
         onChange(previous => ({ ...previous, loading: false, posting: false, error: error.name === "AbortError" ? "불러오는 데 시간이 걸리고 있어요. 다시 확인해 주세요." : error.message }));
         checkAfterPost = method === "POST" && uncertain !== null;
+        // A cooldown expiry or an uncertain POST still needs a successful status
+        // read. A transient GET failure must not strand that reconciliation.
+        retryRead = method === "GET" && transientReadError && Boolean(current?.retryAt || uncertain);
       }
     } finally {
       clearTimeout(timeout);
       busy = false;
       if (live) {
         if (checkAfterPost && !document.hidden) timer = setTimeout(() => request("GET"), 1000);
-        else schedule();
+        else if (!readRejected) schedule(retryRead);
       }
     }
   };

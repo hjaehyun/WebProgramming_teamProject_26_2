@@ -101,6 +101,81 @@ describe("private connection request lifecycle", () => {
     expect(posts()).toHaveLength(0);
   });
 
+  test.each(["network", "server"])("a %s failure during a cooldown check retries the read and unlocks generation without another POST", async failure => {
+    fetchMock.mockResolvedValueOnce(response(snapshot("failed", { canRequest: false, retryAt: new Date(now.getTime() + 300000).toISOString() })));
+    if (failure === "network") fetchMock.mockRejectedValueOnce(new TypeError("connection lost"));
+    else fetchMock.mockResolvedValueOnce(response({ error: "connection lost" }, 503));
+    fetchMock.mockResolvedValueOnce(response(snapshot("failed")));
+    const screen = mount(); await settle();
+    await vi.advanceTimersByTimeAsync(300250);
+    expect(screen.view.payload?.canRequest).toBe(false);
+    expect(screen.view.error).toBe("connection lost");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(methods()).toEqual(["GET", "GET", "GET"]);
+    expect(screen.view.payload?.canRequest).toBe(true);
+    expect(screen.view.error).toBeNull();
+    expect(posts()).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("a cooldown check rejected by authentication does not add transient-error retries", async () => {
+    fetchMock.mockResolvedValueOnce(response(snapshot("failed", { canRequest: false, retryAt: new Date(now.getTime() + 300000).toISOString() })))
+      .mockResolvedValueOnce(response({ error: "로그인이 필요해요." }, 401));
+    const screen = mount(); await settle();
+    await vi.advanceTimersByTimeAsync(360000);
+    expect(methods()).toEqual(["GET", "GET"]);
+    expect(screen.view.error).toBe("로그인이 필요해요.");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test.each([401, 403])("a processing status read rejected with %s stops polling until an explicit refresh", async status => {
+    fetchMock.mockResolvedValueOnce(response(snapshot("processing")))
+      .mockResolvedValueOnce(response({ error: "접근 권한을 확인해 주세요." }, status))
+      .mockResolvedValueOnce(response(snapshot("ready")));
+    const screen = mount(); await settle();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(methods()).toEqual(["GET", "GET"]);
+    expect(screen.view.error).toBe("접근 권한을 확인해 주세요.");
+    expect(vi.getTimerCount()).toBe(0);
+    await screen.session.refresh();
+    expect(screen.view.payload?.connection?.status).toBe("ready");
+    expect(screen.view.error).toBeNull();
+    expect(posts()).toHaveLength(0);
+  });
+
+  test("an incomplete JSON cooldown response is retried until the pending status check succeeds", async () => {
+    fetchMock.mockResolvedValueOnce(response(snapshot("failed", { canRequest: false, retryAt: new Date(now.getTime() + 300000).toISOString() })))
+      .mockResolvedValueOnce(new Response('{"date":', { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(response(snapshot("failed")));
+    const screen = mount(); await settle();
+    await vi.advanceTimersByTimeAsync(300250);
+    expect(screen.view.payload?.canRequest).toBe(false);
+    expect(screen.view.error).toContain("선택한 날짜");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(methods()).toEqual(["GET", "GET", "GET"]);
+    expect(screen.view.payload?.canRequest).toBe(true);
+    expect(screen.view.error).toBeNull();
+    expect(posts()).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("cooldown recovery pauses while hidden and is cancelled on leaving", async () => {
+    fetchMock.mockResolvedValueOnce(response(snapshot("failed", { canRequest: false, retryAt: new Date(now.getTime() + 300000).toISOString() })))
+      .mockRejectedValue(new TypeError("connection lost"));
+    const screen = mount(); await settle();
+    await vi.advanceTimersByTimeAsync(300250);
+    page.hidden = true; page.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(methods()).toEqual(["GET", "GET"]);
+    page.hidden = false; page.dispatchEvent(new Event("visibilitychange")); await settle();
+    expect(methods()).toEqual(["GET", "GET", "GET"]);
+    expect(vi.getTimerCount()).toBe(1);
+    screen.session.dispose();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(methods()).toEqual(["GET", "GET", "GET"]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   test("a hidden tab pauses polling and reads once when it becomes visible", async () => {
     fetchMock.mockResolvedValue(response(snapshot("processing")));
     mount(); await settle();
@@ -154,6 +229,24 @@ describe("private connection request lifecycle", () => {
     await screen.session.start();
     expect(crypto.randomUUID).toHaveBeenCalledTimes(1);
     expect(posts().map(([, options]) => JSON.parse(String(options?.body)).requestId)).toEqual([requestId, requestId]);
+  });
+
+  test("a failed status read after a lost POST response keeps checking the approved request", async () => {
+    fetchMock.mockResolvedValueOnce(response(snapshot()))
+      .mockRejectedValueOnce(new TypeError("POST response lost"))
+      .mockRejectedValueOnce(new TypeError("GET response lost"))
+      .mockResolvedValueOnce(response(snapshot("queued")))
+      .mockResolvedValueOnce(response(snapshot("ready")));
+    const screen = mount(); await settle();
+    await screen.session.start();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(screen.view.error).toBe("GET response lost");
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(methods()).toEqual(["GET", "POST", "GET", "GET", "GET"]);
+    expect(screen.view.payload?.connection?.status).toBe("ready");
+    expect(screen.view.error).toBeNull();
+    expect(posts()).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   test("a failed fragment save shows the error and never generates", async () => {

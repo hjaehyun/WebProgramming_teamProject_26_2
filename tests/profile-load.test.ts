@@ -15,7 +15,7 @@ vi.mock("next/link", () => ({
 import ProfilePage from "../src/app/profile/page";
 
 function state(overrides: Record<string, unknown> = {}) {
-  return { db: { profile: null }, ready: false, authed: false, error: null, refresh: vi.fn(), setProfile: vi.fn(), signOut: vi.fn(), ...overrides };
+  return { db: { profile: null }, ready: false, authed: false, error: null, refresh: vi.fn(), setProfile: vi.fn(), signOut: vi.fn(), isCurrentSession: () => true, ...overrides };
 }
 function render(store: ReturnType<typeof state>) {
   mocks.useStore.mockReturnValue(store);

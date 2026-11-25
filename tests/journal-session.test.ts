@@ -89,4 +89,14 @@ describe("journal composer login-session boundary", () => {
     store.setJournalComposer(date, null);
     expect(renderStore().journalComposers).toEqual({ "2026-11-23": { draft: "계속 쓸 글" } });
   });
+
+  test("an old profile save handler cannot send the previous account's details after a login change", async () => {
+    fetchMock.mockResolvedValueOnce(response(dashboard("account-a"))).mockResolvedValueOnce(response(dashboard("account-b")));
+    await renderStore().refresh();
+    const old = renderStore();
+    await old.refresh();
+    await expect(old.setProfile({ nick: "A 계정의 이름" })).rejects.toThrow("로그인 상태가 바뀌었어요");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(renderStore().db.profile.nick).toBe("account-b");
+  });
 });

@@ -22,7 +22,13 @@ function mount(profile: Record<string, unknown> | null = null, query = "") {
   const cells: any[] = [];
   let cursor = 0, dirty = false, tree: Element;
   const save = vi.fn().mockResolvedValue(undefined);
-  mocks.store.mockReturnValue({ db: { profile }, ready: true, authed: true, error: null, setProfile: save, refresh: vi.fn(), signOut: vi.fn() });
+  let session = 0;
+  const setAccount = (nextProfile: Record<string, unknown> | null, id = "account-a") => {
+    const version = ++session;
+    mocks.store.mockReturnValue({ db: { account: { id }, profile: nextProfile }, ready: true, authed: true, error: null,
+      setProfile: save, refresh: vi.fn(), signOut: vi.fn(), isCurrentSession: () => version === session });
+  };
+  setAccount(profile);
   mocks.search.mockReturnValue(new URLSearchParams(query));
   mocks.state.mockImplementation((initial: unknown) => {
     const slot = cursor++;
@@ -66,13 +72,77 @@ function mount(profile: Record<string, unknown> | null = null, query = "") {
     field(id).props.onChange({ target: typeof value === "boolean" ? { checked: value } : { value } }); render();
   };
   render();
-  return { save, render, all: (node: unknown = tree) => all(node), field, button, change, text: (node: unknown = tree) => text(node) };
+  return { save, render, setAccount, all: (node: unknown = tree) => all(node), field, button, change, text: (node: unknown = tree) => text(node) };
 }
 
 beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal("React", React); });
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("optional illustration profile", () => {
+  test("a same-session dashboard refresh leaves unsaved profile edits available", () => {
+    const profile = { nick: "나", style: "water", consent: true, artProfile: details, artProfileEnabled: true };
+    const page = mount(profile, "step=details");
+    page.change("art-appearance", "아직 저장하지 않은 외형");
+    const store = mocks.store();
+    mocks.store.mockReturnValue({ ...store, db: { ...store.db, profile: { ...profile } } });
+    page.render();
+    expect(page.field("art-appearance").props.value).toBe("아직 저장하지 않은 외형");
+    expect(page.save).not.toHaveBeenCalled();
+  });
+
+  test("a changed login replaces the previous account's private profile and consent choices", async () => {
+    const page = mount({ nick: "A", style: "water", consent: true, artProfile: details, artProfileEnabled: true }, "step=details");
+    page.change("art-appearance", "A 계정의 미저장 외형");
+    page.setAccount({ nick: "B", style: "pencil", consent: false }, "account-b");
+    page.render();
+    expect(page.field("art-appearance").props.value).toBe("");
+    expect(page.field("art-occupation").props.value).toBe("");
+    expect(page.field("ai-consent").props.checked).toBe(false);
+    expect(page.field("art-profile-enabled").props.checked).toBe(false);
+    await page.button("프로필 저장하기").props.onClick();
+    expect(page.save).toHaveBeenCalledWith({ nick: "B", style: "pencil", consent: false, artProfile: emptyDetails, artProfileEnabled: false });
+  });
+
+  test("a fresh login without a profile starts onboarding instead of keeping the previous editor", () => {
+    const page = mount({ nick: "A", style: "water", consent: true, artProfile: details, artProfileEnabled: true }, "step=style");
+    // A same-account logout and login is also a new session.
+    page.setAccount(null);
+    page.render();
+    expect(page.text()).toContain("뭐라고 불러드릴까요?");
+    const name = page.all().find(node => node.type === "input" && node.props.autoComplete === "nickname")!;
+    expect(name.props.value).toBe("");
+    expect(page.field("art-appearance").props.value).toBe("");
+    expect(page.button("다음").props.disabled).toBe(true);
+  });
+
+  test.each(["resolve", "reject"])("a previous account's late save %s cannot navigate or change the new profile form", async outcome => {
+    const page = mount({ nick: "A", style: "water", consent: true, artProfile: details, artProfileEnabled: true }, "step=details");
+    let finish!: () => void;
+    page.save.mockReturnValueOnce(new Promise<void>((resolve, reject) => { finish = () => outcome === "resolve" ? resolve() : reject(new Error("A 계정 저장 실패")); }));
+    const pending = page.button("프로필 저장하기").props.onClick();
+    page.render();
+    page.setAccount({ nick: "B", style: "pencil", consent: false }, "account-b");
+    page.render();
+    expect(page.button("프로필 저장하기").props.disabled).toBe(false);
+    finish(); await pending; page.render();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(page.text()).not.toContain("A 계정 저장 실패");
+    expect(page.field("art-appearance").props.value).toBe("");
+  });
+
+  test("a failed save preserves entered details and can be retried", async () => {
+    const page = mount({ nick: "나", style: "water", consent: true, artProfile: details, artProfileEnabled: true }, "step=details");
+    page.change("art-appearance", "수정한 외형");
+    page.save.mockRejectedValueOnce(new Error("연결이 끊겼어요."));
+    await page.button("프로필 저장하기").props.onClick(); page.render();
+    expect(page.field("art-appearance").props.value).toBe("수정한 외형");
+    expect(page.button("프로필 저장하기").props.disabled).toBe(false);
+    await page.button("프로필 저장하기").props.onClick();
+    expect(page.save).toHaveBeenCalledTimes(2);
+    expect(page.save.mock.calls[1][0].artProfile.appearance).toBe("수정한 외형");
+    expect(mocks.push).toHaveBeenCalledWith("/me");
+  });
+
   test("new accounts start with optional blanks and cannot enable transmission without AI consent", () => {
     const page = mount();
     expect(page.field("art-gender").props.value).toBe("unspecified");

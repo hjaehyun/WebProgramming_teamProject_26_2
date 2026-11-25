@@ -27,7 +27,7 @@ export default function ProfilePage() {
 function Profile() {
   const router = useRouter();
   const params = useSearchParams();
-  const { db, ready, authed, error, refresh, setProfile, signOut } = useStore();
+  const { db, ready, authed, error, refresh, setProfile, signOut, isCurrentSession } = useStore();
   const [step, setStep] = useState("name");
 
   useEffect(() => {
@@ -41,22 +41,23 @@ function Profile() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
-  // Prefill when editing an existing profile. /profile?step=style (the my page's
-  // style "바꾸기") opens straight on the style step.
-  const [prefilled, setPrefilled] = useState(false);
+  // Keep edits during same-session refreshes, but never carry one account's
+  // private appearance or consent choices into another login's form.
+  const [prefilled, setPrefilled] = useState(null);
   const [editing, setEditing] = useState(false);
-  if (ready && authed && !error && !prefilled) {
-    setPrefilled(true);
-    if (db.profile) {
-      setEditing(true);
-      setNick(db.profile.nick);
-      setPicked(db.profile.style);
-      setConsent(db.profile.consent);
-      setArtProfile({ ...emptyArtProfile(), ...db.profile.artProfile });
-      setArtProfileEnabled(Boolean(db.profile.consent && db.profile.artProfileEnabled));
-      if (params.get("step") === "style") setStep("style");
-      else if (params.get("step") === "details") setStep("details");
-    }
+  const accountId = db.account?.id ?? null;
+  if (ready && authed && !error && (!prefilled || prefilled.accountId !== accountId || !prefilled.isCurrentSession())) {
+    const profile = db.profile;
+    setPrefilled({ accountId, isCurrentSession });
+    setEditing(Boolean(profile));
+    setNick(profile?.nick ?? "");
+    setPicked(profile?.style ?? null);
+    setConsent(Boolean(profile?.consent));
+    setArtProfile({ ...emptyArtProfile(), ...profile?.artProfile });
+    setArtProfileEnabled(Boolean(profile?.consent && profile?.artProfileEnabled));
+    setStep(profile && ["style", "details"].includes(params.get("step")) ? params.get("step") : "name");
+    setSaving(false);
+    setSaveError(null);
   }
 
   const name = nick.trim();
@@ -70,16 +71,16 @@ function Profile() {
   }
 
   async function start() {
-    if (!picked || saving) return;
+    if (!picked || saving || !isCurrentSession()) return;
     setSaving(true); setSaveError(null);
     try {
       await setProfile({ nick: name, style: picked, consent,
         artProfile: { ...artProfile, occupation: artProfile.occupation.trim(), appearance: artProfile.appearance.trim() },
         artProfileEnabled: consent && artProfileEnabled });
       // First setup goes on to the how-to slides; an edit returns to the my page.
-      router.push(editing ? "/me" : "/guide");
-    } catch (e) { setSaveError(e.message); }
-    finally { setSaving(false); }
+      if (isCurrentSession()) router.push(editing ? "/me" : "/guide");
+    } catch (e) { if (isCurrentSession()) setSaveError(e.message); }
+    finally { if (isCurrentSession()) setSaving(false); }
   }
 
   if (error) return (

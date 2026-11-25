@@ -185,7 +185,7 @@ export function StoreProvider({ children }) {
         catch (e) { await refresh(); throw e; }
         newSession(); setDb(createEmpty()); setAuthed(false); setError(null);
       },
-      setProfile: async p => { await trackWrite(() => api("PUT", "/api/me/profile", p)); updateThisSession(d => ({ ...d, profile: p })); },
+      setProfile: async p => { requireThisSession(); await trackWrite(() => api("PUT", "/api/me/profile", p)); updateThisSession(d => ({ ...d, profile: p })); },
       /** Today or any past day; a day without a picture keeps its entries in drafts. */
       addEntry: (date, text) => {
         const entry = { id: crypto.randomUUID(), at: new Date().toISOString(), text };

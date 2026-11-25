@@ -160,20 +160,127 @@ describe("daily cartoon hook request lifecycle", () => {
     expect(screen.view.payload?.canRequest).toBe(false);
   });
 
-  test("a lost POST response checks once and does not loop POST while canRequest remains true", async () => {
+  test.each(["network", "server", "invalid-json"])("an unavailable cooldown survives a transient %s read failure without automatically retrying generation", async failure => {
+    const retryAt = new Date(now.getTime() + 10000).toISOString();
+    const oldResult = snapshot("unavailable", { cartoon: { date: today, status: "unavailable", retryAt } });
+    fetchMock.mockResolvedValueOnce(response(oldResult));
+    if (failure === "network") fetchMock.mockRejectedValueOnce(new TypeError("connection lost"));
+    else fetchMock.mockResolvedValueOnce(failure === "server" ? response({ error: "Try later" }, 503) : new Response("{incomplete"));
+    fetchMock.mockResolvedValueOnce(response({ ...oldResult, canRequest: true }));
+    const screen = mount(today);
+    await settle();
+    await vi.advanceTimersByTimeAsync(11000);
+    expect(screen.view.payload?.canRequest).toBe(false);
+    expect(screen.view.error).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.view.payload?.canRequest).toBe(true);
+    expect(screen.view.error).toBeNull();
+    expect(posts()).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("a publication-time read failure retries status before starting the newly eligible edition", async () => {
+    vi.setSystemTime(new Date("2026-11-25T09:59:58Z"));
+    fetchMock.mockResolvedValueOnce(response(snapshot()))
+      .mockRejectedValueOnce(new TypeError("connection lost"))
+      .mockResolvedValueOnce(response(snapshot(null, { canRequest: true })))
+      .mockResolvedValueOnce(response(snapshot("ready")));
+    mount();
+    await settle();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(posts()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(methods()).toEqual(["GET", "GET", "GET", "POST"]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("a lost POST response observes briefly and does not loop POST while canRequest remains true", async () => {
     fetchMock.mockResolvedValueOnce(response(snapshot(null, { canRequest: true })))
       .mockRejectedValueOnce(new TypeError("connection lost"))
       .mockImplementation(async () => response(snapshot(null, { canRequest: true })));
     const screen = mount();
     await settle();
     expect(screen.view.error).toBe("connection lost");
+    expect(screen.view.posting).toBe(true);
     await vi.advanceTimersByTimeAsync(1000);
     await screen.session.refresh();
     await screen.session.refresh();
     await vi.advanceTimersByTimeAsync(60000);
     expect(posts()).toHaveLength(1);
+    expect(screen.view.posting).toBe(false);
     expect(screen.autoRequested.has(today)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test.each(["failed", "unavailable"])("a lost %s retry response keeps observing an old row until the accepted job becomes visible", async status => {
+    const oldResult = snapshot(status, { canRequest: true, cartoon: { date: yesterday, status, attempts: 1, retryAt: null } });
+    fetchMock.mockResolvedValueOnce(response(oldResult))
+      .mockRejectedValueOnce(new TypeError("connection lost"))
+      .mockResolvedValueOnce(response(oldResult))
+      .mockResolvedValueOnce(response(snapshot("processing", { cartoon: { date: yesterday, status: "processing", attempts: 2 } })))
+      .mockResolvedValueOnce(response(snapshot("ready", { cartoon: { date: yesterday, status: "ready", attempts: 2 } })));
+    const screen = mount(yesterday);
+    await settle(); await screen.session.start();
+    expect(screen.view.posting).toBe(true);
+    expect(screen.view.error).toBe("connection lost");
+    await screen.session.start();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(screen.view.payload?.cartoon?.status).toBe(status);
+    expect(screen.view.posting).toBe(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.view.payload?.cartoon?.status).toBe("processing");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.view.payload?.cartoon?.status).toBe("ready");
+    expect(posts()).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test.each([400, 403, 409, 429])("an explicitly rejected POST (%s) reads once without waiting for a job to start", async status => {
+    const oldResult = snapshot("unavailable", { canRequest: true, cartoon: { date: yesterday, status: "unavailable", attempts: 1, retryAt: null } });
+    fetchMock.mockResolvedValueOnce(response(oldResult))
+      .mockResolvedValueOnce(response({ error: "Request rejected" }, status))
+      .mockImplementation(async () => response(oldResult));
+    const screen = mount(yesterday);
+    await settle(); await screen.session.start();
+    expect(screen.view.posting).toBe(false);
+    expect(screen.view.error).toBe("Request rejected");
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(methods()).toEqual(["GET", "POST", "GET"]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("a lost POST keeps checking status through a transient read failure at the observation deadline", async () => {
+    const oldResult = snapshot("unavailable", { canRequest: true, cartoon: { date: yesterday, status: "unavailable", attempts: 1, retryAt: null } });
+    fetchMock.mockResolvedValueOnce(response(oldResult))
+      .mockRejectedValueOnce(new TypeError("connection lost"))
+      .mockImplementation(async () => {
+        if (Date.now() === now.getTime() + 30000) throw new TypeError("status unavailable");
+        return response(Date.now() > now.getTime() + 30000
+          ? snapshot("ready", { cartoon: { date: yesterday, status: "ready", attempts: 2 } }) : oldResult);
+      });
+    const screen = mount(yesterday);
+    await settle(); await screen.session.start();
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(screen.view.error).toBe("status unavailable");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.view.payload?.cartoon?.status).toBe("ready");
+    expect(posts()).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test.each([401, 403])("a processing read rejected with %s stops automatic polling until explicit refresh", async status => {
+    fetchMock.mockResolvedValueOnce(response(snapshot("processing")))
+      .mockResolvedValueOnce(response({ error: "Access denied" }, status))
+      .mockResolvedValueOnce(response(snapshot("ready")));
+    const screen = mount(today);
+    await settle();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.view.error).toBe("Access denied");
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(methods()).toEqual(["GET", "GET"]);
+    expect(vi.getTimerCount()).toBe(0);
+    await screen.session.refresh();
+    expect(screen.view.payload?.cartoon?.status).toBe("ready");
   });
 
   test("changing dates aborts the old reader and ignores it even if it still resolves", async () => {

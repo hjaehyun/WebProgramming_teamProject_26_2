@@ -14,11 +14,12 @@ const emptyView = () => ({ payload: null, error: null, loading: true, posting: f
 /** One request at a time for one mounted edition; dispose fences every late response. */
 export function createEditionSession({ requestedDate, autoRequested, onChange }) {
   let live = true, busy = false, timer, controller, current = null, awaitingStartUntil = 0;
-  const schedule = () => {
+  const schedule = (retryRead = false, stopPolling = false) => {
     clearTimeout(timer);
-    if (live && !document.hidden && awaitingStartUntil > Date.now()) timer = setTimeout(() => request("GET"), Math.min(5000, awaitingStartUntil - Date.now()));
-    else if (live && !document.hidden && pending(current?.cartoon)) timer = setTimeout(() => request("GET"), 5000);
-    else if (live && !document.hidden) {
+    if (!live || document.hidden || stopPolling) return;
+    if (awaitingStartUntil > Date.now()) timer = setTimeout(() => request("GET"), Math.min(5000, awaitingStartUntil - Date.now()));
+    else if (pending(current?.cartoon) || retryRead) timer = setTimeout(() => request("GET"), 5000);
+    else {
       const wakeAt = current?.cartoon ? current.cartoon.retryAt : current?.availableAt;
       const untilNextCheck = new Date(wakeAt).getTime() - Date.now();
       if (untilNextCheck > 0) timer = setTimeout(() => request("GET"), untilNextCheck + 1000);
@@ -27,9 +28,11 @@ export function createEditionSession({ requestedDate, autoRequested, onChange })
   const request = async method => {
     if (!live || busy) return;
     busy = true;
+    clearTimeout(timer);
     controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
-    let startAutomatically = false, checkAfterPost = false;
+    let startAutomatically = false, checkAfterPost = false, mayHaveStarted = method === "POST";
+    let retryRead = false, stopPolling = false, transientReadError = true;
     const requestDate = requestedDate ?? (method === "POST" ? current?.today : null);
     if (method === "POST") onChange(previous => ({ ...previous, posting: true, error: null }));
     try {
@@ -38,7 +41,9 @@ export function createEditionSession({ requestedDate, autoRequested, onChange })
         method, cache: "no-store", signal: controller.signal,
         ...(method === "POST" ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: requestDate }) } : {}),
       });
-      const data = await response.json().catch(() => null);
+      if (!response.ok && response.status < 500) mayHaveStarted = false;
+      transientReadError = response.status >= 500 || response.status === 408 || response.status === 429;
+      const data = await response.json().catch(() => { transientReadError = response.ok || transientReadError; return null; });
       if (!response.ok) throw new Error(data?.error || "만평을 불러오지 못했어요. 잠시 후 다시 확인해 주세요.");
       if (!data || !validCartoonDate(data.today) || !Array.isArray(data.dates)) throw new Error("만평 정보를 확인하지 못했어요.");
       if (!live) return;
@@ -65,9 +70,18 @@ export function createEditionSession({ requestedDate, autoRequested, onChange })
       }
     } catch (error) {
       if (live) {
+        // A lost/invalid response can hide an accepted POST before after() claims it.
+        // Keep observing the old row briefly; an explicit client rejection needs no wait.
+        if (mayHaveStarted) awaitingStartUntil = Date.now() + 30000;
+        stopPolling = method === "GET" && !transientReadError;
+        if (stopPolling) awaitingStartUntil = 0;
         onChange(previous => ({ ...previous, loading: false, posting: awaitingStartUntil > Date.now(), error: error.name === "AbortError" ? "불러오는 데 시간이 걸리고 있어요. 잠시 후 다시 확인해 주세요." : error.message }));
         // A lost POST response may still have created the shared job. Read before offering another start.
         checkAfterPost = method === "POST";
+        // Expired wakeups still need a successful read; transient failures must
+        // not leave cooldowns or an uncertain start stuck on the previous row.
+        retryRead = method === "GET" && transientReadError && Boolean(awaitingStartUntil ||
+          (current?.cartoon ? current.cartoon.retryAt : current?.availableAt));
       }
     } finally {
       clearTimeout(timeout);
@@ -75,7 +89,7 @@ export function createEditionSession({ requestedDate, autoRequested, onChange })
       if (live) {
         if (startAutomatically) void request("POST");
         else if (checkAfterPost && !document.hidden) timer = setTimeout(() => request("GET"), 1000);
-        else schedule();
+        else schedule(retryRead, stopPolling);
       }
     }
   };
