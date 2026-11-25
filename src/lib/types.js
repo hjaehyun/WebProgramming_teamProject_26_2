@@ -6,7 +6,12 @@
 
 /** @typedef {string} DateKey YYYY-MM-DD */
 /** @typedef {"day"|"cat"|"rain"|"park"|"cafe"|"night"} Scene */
-/** @typedef {"water"|"pencil"|"crayon"|"story"|"gouache"} StyleId gouache는 기존 그림 호환용. */
+/** @typedef {"water"|"pencil"|"crayon"|"story"|"anime"|"gouache"} StyleId gouache는 기존 그림 호환용. anime는 화면·DB 값이 같음. */
+/**
+ * 그림마다 고르는 액자. 화면이 CSS로만 그리고 그림 파일은 그대로. 목록은 src/lib/frames.js.
+ * PUT /api/me/artworks/[date]/frame {frame} -> {ok: true, frame}
+ * @typedef {"basic"|"diary"|"polaroid"|"wood"|"tape"|"sketch"} FrameId
+ */
 /** @typedef {"queued"|"processing"|"ready"|"failed"} ArtworkStatus */
 /** @typedef {"queued"|"summarizing"|"drawing"|"ready"|"failed"} ArtworkPhase */
 
@@ -65,6 +70,7 @@
  * @property {boolean} entriesChanged 그림을 그린 뒤 조각글이 더해지거나 고쳐지거나 지워짐(글 내용 기준 비교). 다시 그리기는 지금의 조각글로 그림.
  * @property {Song|null} song 그림에 붙인 YouTube 곡. 아직 고르지 않았거나 기능이 꺼져 있으면 null.
  * @property {null} mood 항상 null. 곡을 고르는 분위기는 서버 DB에만 있음. 저장된 분위기가 없는 그림은 노래 요청 시 기본 calm 목록을 사용함.
+ * @property {FrameId} frame 고른 액자. 기본값 basic. 다시 그려도 유지.
  */
 
 /**
@@ -157,6 +163,7 @@
  * @property {string} summary
  * @property {string|null} note DB exhibition_items.caption의 화면용 이름.
  * @property {{videoId:string,title:string,channel:string}|null} song 그림에 붙인 곡 (id 없음).
+ * @property {FrameId} frame 주인이 고른 액자. 공개 전시의 그림일기 액자에는 날씨를 넣지 않음(응답에도 없음).
  */
 
 /**

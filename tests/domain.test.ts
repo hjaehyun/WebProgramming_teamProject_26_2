@@ -1,5 +1,15 @@
 import { describe, expect, test } from "vitest";
-import { dateSchema, entriesChanged, entrySchema, seoulDate, seoulTime, displayDate } from "../src/server/core/domain";
+import { dateSchema, entriesChanged, entrySchema, seoulDate, seoulTime, displayDate, frames, styles } from "../src/server/core/domain";
+describe("frames and drawing styles", () => {
+  test("the six frames, in order, start with basic", () => {
+    expect(frames).toEqual(["basic", "diary", "polaroid", "wood", "tape", "sketch"]);
+  });
+  test("the anime style is described only by its features", () => {
+    expect(styles.anime.label).toBe("애니 풍경");
+    expect(styles.anime.prompt).toMatch(/hand-painted anime background/i);
+    for (const s of Object.values(styles)) expect(s.prompt).not.toMatch(/ghibli|miyazaki|totoro|지브리|미야자키|토토로/i);
+  });
+});
 describe("fragments changed since the picture was drawn", () => {
   const snapshot = [{ content: "산책", created_at: "2026-11-19T01:00:00+00:00" }, { content: "비", created_at: "2026-11-19T02:00:00+00:00" }];
   test("compares the texts only, in any order", () => {

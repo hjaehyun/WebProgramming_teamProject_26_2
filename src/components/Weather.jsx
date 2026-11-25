@@ -2,7 +2,7 @@
 // under the fragment's time. Renders nothing when the fragment has no weather (location refused,
 // lookup failed, or written before the feature existed).
 
-const WEATHER = {
+export const WEATHER = {
   clear: { icon: "☀️", label: "맑음" },
   cloudy: { icon: "⛅", label: "구름많음" },
   overcast: { icon: "☁️", label: "흐림" },

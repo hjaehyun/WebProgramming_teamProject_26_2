@@ -3,6 +3,17 @@
 .frame { border-radius: 16px; overflow: hidden; display: block; box-shadow: 0 6px 20px rgba(35, 33, 29, 0.10); }
 .figure figcaption { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 .badge { padding: 2px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); font-weight: 500; }
+
+/* Frame picker: one radio per frame, shown as chips. The radio stays focusable for the keyboard. */
+.frames { border: 0; margin: 0; padding: 0; min-width: 0; }
+.frames legend { padding: 0; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { position: relative; cursor: pointer; }
+.chip input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.chip span { display: block; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); font-size: 13px; }
+.chip input:checked + span { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+.chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.frames:disabled .chip { cursor: default; opacity: .6; }
 .h { margin: 0 0 6px; }
 .summary { margin: 0; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
 .fallback { margin: 6px 0 0; font-size: 12px; color: var(--muted); }

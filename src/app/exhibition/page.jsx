@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import Framed from "@/components/Framed";
 import Picture from "@/components/Picture";
 import { BottomNav, IconNext, ProfileButton, Screen } from "@/components/ui";
 import { monthDay } from "@/lib/date";
+import { frameOf } from "@/lib/frames";
 import { useStore } from "@/lib/store";
 import s from "./exhibition.module.css";
 
@@ -85,8 +87,11 @@ function Exhibition() {
           <div className={s.grid}>
             {works.map((w, i) => (
               <figure key={w.date} className={s.work}>
-                <Link href={`/gallery/${w.date}`} className={s.workArt}>
-                  <Picture scene={w.scene} imageUrl={w.imageUrl} imageError={w.imageError} alt={w.summary} />
+                {/* A frame's tape, tilt and shadow need room: only the basic look keeps the clipping box. */}
+                <Link href={`/gallery/${w.date}`} className={frameOf(w.frame) === "basic" ? s.workArt : s.workFramed}>
+                  <Framed frame={w.frame} date={w.date} summary={w.summary} size="sm">
+                    <Picture scene={w.scene} imageUrl={w.imageUrl} imageError={w.imageError} alt={w.summary} />
+                  </Framed>
                   <span className={s.no}>{i + 1}</span>
                 </Link>
                 <figcaption>

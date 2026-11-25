@@ -90,6 +90,8 @@ Cron 호출 URL은 `https://harujogak-hihellow18.vercel.app/api/jobs` 그대로�
 
 **`20261120064000_edit_finished_days.sql`(그림 있는 날의 조각글 변경)은 아직 어느 DB에도 적용하지 않았습니다.** **반드시 이 파일을 먼저 적용한 뒤 코드를 배포합니다.** 코드가 먼저 나가면 삭제 API가 아직 없는 `remove_team_entry`를 불러 오늘 조각글 삭제까지 `503`으로 실패하고, 지난 날 추가·수정은 기존 규칙대로 `409`로 거부됩니다. 이 파일은 `save_team_entry`·`edit_entry`·`request_team_artwork`·`close_day_for`를 같은 시그니처로 교체하고 `remove_team_entry` 함수와 `deleted_artwork_attempts` 표를 추가합니다. 기존 행은 바꾸지 않습니다. 노래 마이그레이션이 없는 DB에도 적용할 수 있습니다.
 
+**`20261125090000_artwork_frames_anime.sql`(그림별 액자, 애니 풍경 그림체)도 먼저 적용한 뒤 코드를 배포합니다.** 새 코드는 `daily_artworks.frame`을 읽으므로 코드가 먼저 나가면 `/api/me`·그림 조회·공개 전시가 실패합니다. 이 파일은 `frame` 칸(기본 `basic`, 6종 검사)과 본인 그림의 액자만 바꾸는 `set_artwork_frame(date,text)`를 추가하고, `profiles_art_style_check`에 `anime`를 더합니다. 기존 그림은 모두 `basic`이 되어 지금과 똑같이 보이며 다른 행은 바꾸지 않습니다. 적용 확인은 `information_schema.columns`의 `daily_artworks.frame`과 `pg_proc`의 `set_artwork_frame`으로 합니다. `anime` 그림체의 운영 생성은 아직 확인하지 않았습니다.
+
 새 worker는 `crayon`·`story`를 포함한 그림체를 지원하며, 운영에서 크레파스 재생성·동화책 자동 생성·색연필 생성과 PNG 다운로드를 실제 확인했습니다. 만료 선점 복구는 과거 날짜 시험 자료와 의도적으로 오래된 선점을 사용했으며, 실제 자정 통과·프로세스 강제 종료 시험은 아닙니다. 이전 배포로 복구할 때는 현재 DB와 새 그림체에 대한 호환성을 함께 확인합니다.
 
 ## 인증과 메일
@@ -136,6 +138,7 @@ JSON 변경 요청은 `Content-Type: application/json`과 동일 origin을 사�
 | `DELETE /api/me/entries/[id]` | 본문 없음 | `{ok:true,artworkRemoved}`; 그림 있는 날의 마지막 조각글이면 그림도 삭제 |
 | `POST /api/artworks` | `{date,redraw?,requestId}` | `{artwork:Artwork}`; UUID `requestId` 필수 |
 | `GET /api/artworks/[date]` | 없음 | `{artwork:Artwork}` |
+| `PUT /api/me/artworks/[date]/frame` | `{frame}` | `{ok:true,frame}`; `basic`·`diary`·`polaroid`·`wood`·`tape`·`sketch` 중 하나. 본인 그림이 없는 날은 `404` |
 | `PATCH /api/me/exhibition` | `{dates?,isPublic?}` 중 하나 이상 | `{ok:true,id}` |
 | `GET /api/exhibitions/[id]` | 없음 | `PublicExhibition`; 비공개는 본인만 |
 | `GET /api/exhibitions/[id]/images/[date]` | 없음 | 공개 상태·선택·소유권 검사 후 이미지 |
@@ -162,7 +165,9 @@ JSON 변경 요청은 `Content-Type: application/json`과 동일 origin을 사�
 
 본인 그림 URL은 비공개 Storage의 1시간 서명 URL입니다. 개별 그림 조회에서 저장된 파일의 URL을 만들지 못하면 `503`으로 알립니다. 전체 조회는 해당 그림의 `imageError:true`를 표시해 파일 로드 문제를 구분합니다. `ready`라도 이미지 로드 오류를 예시 그림 생성 성공으로 처리하지 않습니다.
 
-전시는 현재 사용자별 첫 전시 하나를 사용합니다. 선택은 최대 100장, 중복 없는 본인 완성 그림이며 순서를 보존합니다. 공개 응답에는 닉네임·선택 그림·요약·캡션만 포함하고 원문 조각글·이메일·사용자 ID·프롬프트·Storage 경로를 넣지 않습니다. 공개 이미지 링크는 매 요청 공개 여부와 선택 상태를 다시 검사하므로 비공개 전환 후 기존 링크로 새로 조회할 수 없습니다. 이미 내려받은 이미지까지 회수하는 기능은 아닙니다.
+전시는 현재 사용자별 첫 전시 하나를 사용합니다. 선택은 최대 100장, 중복 없는 본인 완성 그림이며 순서를 보존합니다. 공개 응답에는 닉네임·선택 그림·요약·캡션·액자만 포함하고 원문 조각글·날씨·이메일·사용자 ID·프롬프트·Storage 경로를 넣지 않습니다. 그래서 공개 전시의 그림일기 액자는 날짜만 보이고 날씨 칸이 없습니다. 공개 이미지 링크는 매 요청 공개 여부와 선택 상태를 다시 검사하므로 비공개 전환 후 기존 링크로 새로 조회할 수 없습니다. 이미 내려받은 이미지까지 회수하는 기능은 아닙니다.
+
+액자는 그림마다 하나를 고르며(그림 상세, 완성된 그림만) 화면이 CSS로만 그립니다. 그림 파일·생성 작업·스냅샷은 바뀌지 않고, 다시 그려도 고른 액자는 유지됩니다. 상세·내 전시·공개 전시에 보이고 갤러리 달력·전시 고르기·큐레이터의 작은 칸에는 씌우지 않습니다. 같은 날 액자를 여러 번 바꾸면 고른 순서대로 한 번에 하나씩 저장하고, 실패하면 알림 뒤 서버 값으로 되돌립니다.
 
 탈퇴는 대기·처리 중 작업이 있으면 먼저 완료를 기다리게 합니다. 삭제 준비 이후 기록 쓰기를 차단하고 Storage 정리가 성공한 뒤 Auth 사용자를 삭제합니다. 중간 실패 시 `GET /api/me`가 `deletionPending:true`로 반환해 재시도를 유지합니다. 아주 오래된 작업의 늦은 외부 업로드까지 잔여 파일이 절대 없다고 보장하는 구조는 아니므로 운영 정리 검증에 포함합니다.
 

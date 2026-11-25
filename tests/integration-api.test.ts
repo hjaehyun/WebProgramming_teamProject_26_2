@@ -7,7 +7,7 @@ vi.mock("../src/server/core/ai",()=>({aiConfigured:mocks.aiConfigured}));
 vi.mock("../src/server/recovery",()=>({clearRecovery:mocks.clearRecovery,requireRecovery:mocks.requireRecovery}));
 import {auth,me,accountDelete,profilePut} from "../src/server/auth-handlers";
 import {entryChange,entryPost} from "../src/server/entry-handlers";
-import {artworkPost} from "../src/server/artwork-handlers";
+import {artworkFramePut,artworkPost} from "../src/server/artwork-handlers";
 import {exhibitionGet,exhibitionImageGet} from "../src/server/exhibition-handlers";
 import {body,run,json} from "../src/server/request";
 
@@ -60,6 +60,7 @@ function fixture() {
     rpc:vi.fn(async(name:string,args?:Row)=>{
       if(name==="begin_account_deletion") tables.profiles[0].deleting_at="2026-11-11T00:00:00Z";
       if(name==="save_team_entry") return {data:{id:args!.p_id,content:args!.p_content,created_at:"2026-11-11T01:00:00Z"},error:null};
+      if(name==="set_artwork_frame") return {data:args!.p_frame,error:null};
       return {data:artworkId,error:null};
     }),
     storage:{from:()=>bucket},
@@ -191,5 +192,53 @@ describe("public exhibition projection",()=>{
   test("a public image must be both owned by the exhibitor and selected in the exhibition",async()=>{
     f.tables.exhibition_items=[];
     expect((await exhibitionImageGet(exhibitionId,date)).status).toBe(404);expect(f.bucket.download).not.toHaveBeenCalled();
+  });
+  test("public items expose exactly the agreed keys, with the frame",async()=>{
+    f.tables.daily_artworks[0].frame="diary";
+    const items=(await (await exhibitionGet(exhibitionId)).json()).items;
+    expect(Object.keys(items[0]).sort()).toEqual(["date","frame","imageUrl","note","scene","song","summary"]);
+    expect(items[0].frame).toBe("diary");
+  });
+  test("a public item without a stored frame shows the basic frame",async()=>{
+    const items=(await (await exhibitionGet(exhibitionId)).json()).items;
+    expect(items[0].frame).toBe("basic");
+  });
+});
+
+describe("artwork frames",()=>{
+  const put=(payload:unknown,day=date,requestOrigin=origin)=>artworkFramePut(new Request(`${origin}/api/me/artworks/${day}/frame`,{method:"PUT",headers:{Origin:requestOrigin,"Content-Type":"application/json"},body:JSON.stringify(payload)}),day);
+  test("a frame change goes through the owner RPC only",async()=>{
+    const r=await put({frame:"wood",user_id:bob});
+    expect(r.status).toBe(200);expect(await r.json()).toEqual({ok:true,frame:"wood"});
+    expect(f.db.rpc).toHaveBeenCalledWith("set_artwork_frame",{p_date:date,p_frame:"wood"});
+  });
+  test("unknown frames and impossible dates are rejected before the RPC",async()=>{
+    expect((await put({frame:"gold"})).status).toBe(400);
+    expect((await put({frame:"wood"},"2026-13-01")).status).toBe(400);
+    expect(f.db.rpc).not.toHaveBeenCalled();
+  });
+  test("cross-origin and signed-out frame changes are refused",async()=>{
+    expect((await put({frame:"wood"},date,"https://another.invalid")).status).toBe(403);
+    f.db.auth.getUser.mockResolvedValue({data:{user:null},error:null});
+    expect((await put({frame:"wood"})).status).toBe(401);
+    expect(f.db.rpc).not.toHaveBeenCalled();
+  });
+  test("a day without the caller's picture is 404",async()=>{
+    f.db.rpc.mockResolvedValueOnce({data:null,error:null});
+    expect((await put({frame:"tape"})).status).toBe(404);
+  });
+  test("the caller's own artwork carries its frame, basic when unset",async()=>{
+    const first=await artworkPost(request("/api/artworks",{date,requestId}));
+    expect((await first.json()).artwork.frame).toBe("basic");
+    f.tables.daily_artworks[0].frame="polaroid";
+    const second=await artworkPost(request("/api/artworks",{date,requestId}));
+    expect((await second.json()).artwork.frame).toBe("polaroid");
+  });
+});
+
+describe("anime drawing style",()=>{
+  test("profile accepts the anime style as is",async()=>{
+    const r=await profilePut(request("/api/me/profile",{nick:"나",style:"anime",consent:true}));
+    expect(r.status).toBe(200);expect(f.tables.profiles[0].art_style).toBe("anime");
   });
 });
