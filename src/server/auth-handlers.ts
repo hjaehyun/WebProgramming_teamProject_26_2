@@ -5,6 +5,7 @@ import { authenticated,body,HttpError,json,mutation,rpcError,run } from "./reque
 import { dashboard,fromStyle } from "./data";
 import { accountInfo } from "./oauth";
 import { clearRecovery,requireRecovery } from "./recovery";
+import { artProfileSchema } from "./core/art-profile";
 
 const credentials=z.object({email:z.string().trim().pipe(z.email()),password:z.string().min(8).max(128)});
 export function auth(request: Request, mode: "signup"|"login"|"logout") { return run(async()=>{
@@ -26,8 +27,13 @@ export function auth(request: Request, mode: "signup"|"login"|"logout") { return
 export function me() { return run(async()=>{const {db,user,profile}=await authenticated(true);return json(await dashboard(db,user,profile));}); }
 export function profilePut(request:Request) { return run(async()=>{
   mutation(request);const {db,user}=await authenticated();
-  const p=z.object({nick:z.string().trim().min(1).max(30),style:z.enum(["water","pencil","crayon","story","anime","gouache"]),consent:z.boolean()}).parse(await body(request));
-  const {error}=await db.from("profiles").update({nickname:p.nick,art_style:fromStyle(p.style),ai_consent_at:p.consent?new Date().toISOString():null,onboarded:true}).eq("id",user.id);
+  const p=z.object({nick:z.string().trim().min(1).max(30),style:z.enum(["water","pencil","crayon","story","anime","gouache"]),consent:z.boolean(),
+    artProfile:artProfileSchema.optional(),artProfileEnabled:z.boolean().optional()}).parse(await body(request));
+  const {error}=await db.from("profiles").update({nickname:p.nick,art_style:fromStyle(p.style),ai_consent_at:p.consent?new Date().toISOString():null,onboarded:true,
+    // Legacy clients omit these fields; editing a nickname must not erase them.
+    ...(p.artProfile === undefined ? {} : {art_profile:p.artProfile}),
+    ...(!p.consent ? {art_profile_enabled:false} : p.artProfileEnabled === undefined ? {} : {art_profile_enabled:p.artProfileEnabled}),
+  }).eq("id",user.id);
   if(error) throw error;return json({ok:true});
 }); }
 async function checkPassword(email:string,password:string) {

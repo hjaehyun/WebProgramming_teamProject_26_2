@@ -17,7 +17,7 @@ export async function processOne(id?: string) {
     const resumed = Boolean(job.image_prompt && job.scene_summary && job.title);
     const scene = resumed
       ? { image_prompt: job.image_prompt, summary: job.scene_summary, title: job.title, tags: job.tags ?? [], scene: job.scene ?? "day", mood: undefined }
-      : await summarize(job.entry_snapshot, job.art_style as Style);
+      : await summarize(job.entry_snapshot, job.art_style as Style, job.profile_snapshot ?? {});
     const checkpoint = await db.from("daily_artworks").update({ title: scene.title, scene_summary: scene.summary, image_prompt: scene.image_prompt, tags: scene.tags ?? [], scene: scene.scene ?? "day" }).eq("id", job.id).eq("claim_token", job.claim_token).eq("status", "processing").select("id").single();
     if (checkpoint.error) throw checkpoint.error;
     // The mood only chooses the song list. Its column exists after the artwork_songs migration, so this

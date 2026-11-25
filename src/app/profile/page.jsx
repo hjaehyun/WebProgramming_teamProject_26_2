@@ -9,6 +9,10 @@ import { useStore } from "@/lib/store";
 import { STYLES, withParticle } from "@/lib/styles";
 import s from "./profile.module.css";
 
+const emptyArtProfile = () => ({ gender: "unspecified", ageRange: "unspecified", occupation: "", appearance: "" });
+const genderOptions = [["unspecified", "선택 안 함"], ["female", "여성적인 모습"], ["male", "남성적인 모습"], ["neutral", "중성적인 모습"]];
+const ageOptions = [["unspecified", "선택 안 함"], ["child", "어린이"], ["teen", "10대"], ["20s", "20대"], ["30s", "30대"], ["40s", "40대"], ["50s", "50대"], ["60plus", "60대 이상"]];
+
 // useSearchParams needs a Suspense boundary so the page can still be prerendered.
 export default function ProfilePage() {
   return (
@@ -30,6 +34,8 @@ function Profile() {
   const [nick, setNick] = useState("");
   const [picked, setPicked] = useState(null);
   const [consent, setConsent] = useState(false);
+  const [artProfile, setArtProfile] = useState(emptyArtProfile);
+  const [artProfileEnabled, setArtProfileEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
@@ -44,7 +50,10 @@ function Profile() {
       setNick(db.profile.nick);
       setPicked(db.profile.style);
       setConsent(db.profile.consent);
+      setArtProfile({ ...emptyArtProfile(), ...db.profile.artProfile });
+      setArtProfileEnabled(Boolean(db.profile.consent && db.profile.artProfileEnabled));
       if (params.get("step") === "style") setStep("style");
+      else if (params.get("step") === "details") setStep("details");
     }
   }
 
@@ -52,7 +61,7 @@ function Profile() {
 
   function next() {
     if (!name) return;
-    // Editing already has a style, so the name step saves on its own.
+    // Editing already has a style; save the name and optional illustration details together.
     if (editing) return start();
     setNick(name);
     setStep("style");
@@ -62,7 +71,9 @@ function Profile() {
     if (!picked || saving) return;
     setSaving(true); setSaveError(null);
     try {
-      await setProfile({ nick: name, style: picked, consent });
+      await setProfile({ nick: name, style: picked, consent,
+        artProfile: { ...artProfile, occupation: artProfile.occupation.trim(), appearance: artProfile.appearance.trim() },
+        artProfileEnabled: consent && artProfileEnabled });
       // First setup goes on to the how-to slides; an edit returns to the my page.
       router.push(editing ? "/me" : "/guide");
     } catch (e) { setSaveError(e.message); }
@@ -111,13 +122,13 @@ function Profile() {
       )}
 
       <main className={`scroll ${s.main}`}>
-        {step === "name" ? (
+        {step !== "style" ? (
           <div className={s.section}>
             <div className={s.title}>
               {editing ? (
                 <>
-                  <h1 className="hand">어떤 이름으로 바꿀까요?</h1>
-                  <p>바꾼 이름은 갤러리와 전시회에 바로 보여요.</p>
+                  <h1 className="hand">{step === "details" ? "그림 속 내 모습" : "내 프로필을 다듬어요"}</h1>
+                  <p>이름은 갤러리와 전시회에 보여요. 그림에 담을 내 모습은 원하는 만큼만 알려주세요.</p>
                 </>
               ) : (
                 <>
@@ -142,10 +153,40 @@ function Profile() {
                 maxLength={12}
                 placeholder="예: 재현"
                 autoComplete="nickname"
-                autoFocus
+                autoFocus={step !== "details"}
               />
               <span className={s.count}>{nick.length}/12</span>
             </label>
+            <section className={s.artProfile} aria-labelledby="art-profile-title" id="art-profile">
+              <div className={s.detailsTitle}>
+                <h2 id="art-profile-title">그림에 담을 내 모습 <span>선택 입력</span></h2>
+                <p>인물이 등장하는 장면에서 참고해요. 비워 둔 정보는 추정하지 않고, 하는 일만으로 일기에 없는 사건을 만들지 않아요.</p>
+              </div>
+              <div className={s.detailGrid}>
+                <label className={s.detailField} htmlFor="art-gender"><span>성별 표현</span>
+                  <select id="art-gender" value={artProfile.gender} onChange={event => setArtProfile(previous => ({ ...previous, gender: event.target.value }))} disabled={saving}>
+                    {genderOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+                <label className={s.detailField} htmlFor="art-age"><span>연령대</span>
+                  <select id="art-age" value={artProfile.ageRange} onChange={event => setArtProfile(previous => ({ ...previous, ageRange: event.target.value }))} disabled={saving}>
+                    {ageOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className={s.detailField} htmlFor="art-occupation"><span>하는 일</span>
+                <input id="art-occupation" value={artProfile.occupation} onChange={event => setArtProfile(previous => ({ ...previous, occupation: event.target.value }))} maxLength={80} placeholder="예: 대학생, 개발자, 정원사" autoComplete="off" disabled={saving} />
+              </label>
+              <label className={s.detailField} htmlFor="art-appearance"><span>외형 특징</span>
+                <input id="art-appearance" value={artProfile.appearance} onChange={event => setArtProfile(previous => ({ ...previous, appearance: event.target.value }))} maxLength={200} placeholder="예: 짧은 머리, 둥근 안경" autoComplete="off" disabled={saving} />
+              </label>
+              <div className={s.applyBox}>
+                <label className={s.applyToggle} htmlFor="art-profile-enabled"><input id="art-profile-enabled" type="checkbox" checked={artProfileEnabled} disabled={!consent || saving} onChange={event => setArtProfileEnabled(event.target.checked)} aria-describedby="art-profile-explanation" /><span>내 그림에 반영하기</span></label>
+                <p id="art-profile-explanation">켜면 입력한 정보를 OpenAI로 보내 내 그림을 그릴 때 참고해요. 저장 후 새로 요청하거나 다시 그리는 그림부터 적용돼요. 이미 완성된 그림은 바뀌지 않아요.</p>
+                {!consent && <p className={s.consentHint}>아래 AI 전송 동의에 체크하면 켤 수 있어요.</p>}
+              </div>
+              <p className={s.detailsNote}>입력한 프로필 항목은 공개 전시에 표시되지 않아요. 전시를 공개하면 이 모습이 반영된 그림은 다른 사람도 볼 수 있어요.</p>
+            </section>
           </div>
         ) : (
           <div className={s.section}>
@@ -212,13 +253,13 @@ function Profile() {
 
       <div className="bar">
         <div>
-          <label><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /> 조각글·작성 시각·저장된 장면 요약과 태그를 OpenAI로 보내 그림·큐레이터 해설·하루연결의 주제를 만드는 데 동의해요.</label>
+          <label><input id="ai-consent" type="checkbox" checked={consent} onChange={e => { setConsent(e.target.checked); if (!e.target.checked) setArtProfileEnabled(false); }} /> 조각글·작성 시각·저장된 장면 요약과 태그를 OpenAI로 보내 그림·큐레이터 해설·하루연결의 주제를 만드는 데 동의해요. ‘내 그림에 반영하기’를 켠 프로필 정보는 내 그림 생성에도 사용돼요.</label>
           <p><Link href="/privacy">전송 정보 확인</Link> · 동의하지 않아도 글은 저장할 수 있어요.</p>
           {saveError && <p role="alert">{saveError}</p>}
         </div>
-        {step === "name" ? (
+        {step !== "style" ? (
           <button className="btn" onClick={next} disabled={!name || saving}>
-            {editing ? "이름 저장하기" : "다음"}
+            {saving ? "저장하는 중…" : editing ? "프로필 저장하기" : "다음"}
           </button>
         ) : (
           <button className="btn" onClick={start} disabled={!picked || saving}>

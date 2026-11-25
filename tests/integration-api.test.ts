@@ -122,6 +122,43 @@ describe("authenticated API boundaries",()=>{
     const r=await profilePut(request("/api/me/profile",{...input,consent:false}));
     expect(r.status).toBe(200);expect(f.tables.profiles[0].art_style).toBe("crayon");expect(f.tables.profiles[0].ai_consent_at).toBeNull();
   });
+  test("optional appearance fields round-trip only through the owner's private profile",async()=>{
+    const artProfile={gender:"neutral",ageRange:"20s",occupation:"  개발자  ",appearance:"  둥근 안경  "};
+    const r=await profilePut(request("/api/me/profile",{nick:"나",style:"water",consent:true,artProfile,artProfileEnabled:true,user_id:bob}));
+    expect(r.status).toBe(200);
+    expect(f.tables.profiles[0]).toMatchObject({art_profile:{...artProfile,occupation:"개발자",appearance:"둥근 안경"},art_profile_enabled:true});
+    expect(f.tables.profiles[1]).not.toHaveProperty("art_profile");
+    const payload=await (await me()).json();
+    expect(payload.profile).toMatchObject({artProfile:{...artProfile,occupation:"개발자",appearance:"둥근 안경"},artProfileEnabled:true});
+    expect(payload.artworks[date]).not.toHaveProperty("profile_snapshot");
+  });
+  test("older clients editing the basic profile preserve saved appearance preferences",async()=>{
+    const saved={gender:"male",occupation:"도서관 사서"};
+    Object.assign(f.tables.profiles[0],{art_profile:saved,art_profile_enabled:true});
+    expect((await profilePut(request("/api/me/profile",{nick:"새 이름",style:"pencil",consent:true}))).status).toBe(200);
+    expect(f.tables.profiles[0]).toMatchObject({nickname:"새 이름",art_profile:saved,art_profile_enabled:true});
+  });
+  test("withdrawing AI consent disables appearance use while retaining editable preferences",async()=>{
+    Object.assign(f.tables.profiles[0],{art_profile:{appearance:"안경"},art_profile_enabled:true});
+    expect((await profilePut(request("/api/me/profile",{nick:"나",style:"water",consent:false,artProfileEnabled:true}))).status).toBe(200);
+    expect(f.tables.profiles[0]).toMatchObject({ai_consent_at:null,art_profile_enabled:false,art_profile:{appearance:"안경"}});
+    expect((await (await me()).json()).profile.artProfileEnabled).toBe(false);
+  });
+  test("old profiles receive empty optional fields without enabling personalization",async()=>{
+    const payload=await (await me()).json();
+    expect(payload.profile).toMatchObject({artProfile:{gender:"unspecified",ageRange:"unspecified",occupation:"",appearance:""},artProfileEnabled:false});
+  });
+  test.each([null,[],{gender:"invented"},{ageRange:"exact-age"},{occupation:"a".repeat(81)},{appearance:"a".repeat(201)},
+    {occupation:"line\nbreak"},{appearance:"hidden\u0000text"},{email:"private@example.test"}])("invalid art profile %j is rejected without changing the profile",async artProfile=>{
+    const before=JSON.stringify(f.tables.profiles);
+    const r=await profilePut(request("/api/me/profile",{nick:"나",style:"water",consent:true,artProfile,artProfileEnabled:true}));
+    expect(r.status).toBe(400);expect(JSON.stringify(f.tables.profiles)).toBe(before);
+  });
+  test("appearance use can be disabled independently and fields can be explicitly cleared",async()=>{
+    Object.assign(f.tables.profiles[0],{art_profile:{occupation:"개발자"},art_profile_enabled:true});
+    expect((await profilePut(request("/api/me/profile",{nick:"나",style:"water",consent:true,artProfile:{},artProfileEnabled:false}))).status).toBe(200);
+    expect(f.tables.profiles[0]).toMatchObject({art_profile_enabled:false,art_profile:{gender:"unspecified",ageRange:"unspecified",occupation:"",appearance:""}});
+  });
   test("generation uses only the server job and owner-filtered saved records",async()=>{
     const r=await artworkPost(request("/api/artworks",{date,requestId,id:"other-artwork",imagePath:`${bob}/private.png`,entries:["injected"]}));
     const result=await r.json();expect(r.status).toBe(200);expect(mocks.processOne).toHaveBeenCalledWith(artworkId);
@@ -244,9 +281,11 @@ describe("authenticated API boundaries",()=>{
 
 describe("public exhibition projection",()=>{
   test("does not serialize private notes, user identifiers, storage paths or signed tokens",async()=>{
+    f.tables.profiles[0].art_profile={appearance:"private appearance marker",occupation:"private occupation marker"};
+    f.tables.daily_artworks[0].profile_snapshot=f.tables.profiles[0].art_profile;
     const r=await exhibitionGet(exhibitionId);expect(r.status).toBe(200);const result=await r.json();const serialized=JSON.stringify(result);
     expect(result.items).toHaveLength(1);expect(result.items[0].imageUrl).toBe(`/api/exhibitions/${exhibitionId}/images/${date}`);
-    for(const value of [alice,bob,"내 기록","private-token","image_path","user_id","alice@example.test"]) expect(serialized).not.toContain(value);
+    for(const value of [alice,bob,"내 기록","private-token","image_path","user_id","alice@example.test","private appearance marker","private occupation marker","profile_snapshot","art_profile"]) expect(serialized).not.toContain(value);
     expect(f.bucket.createSignedUrls).not.toHaveBeenCalled();
   });
   test("private exhibitions deny signed-out viewers before reading artworks",async()=>{

@@ -94,6 +94,26 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); });
 
 describe("artwork final-write reconciliation", () => {
+  test("new summaries use only the appearance snapshot captured with that job", async () => {
+    const state = storageAndDatabase();
+    state.row.image_prompt = null;
+    state.row.profile_snapshot = { gender: "neutral", appearance: "둥근 안경" };
+    dependencies.summarize.mockResolvedValue({ title: "산책", summary: "공원을 걸었다.", image_prompt: "A park", tags: [], scene: "park" });
+    expect(await processOne()).toEqual({ processed: true, status: "ready" });
+    expect(dependencies.summarize).toHaveBeenCalledExactlyOnceWith(state.row.entry_snapshot, "watercolor", state.row.profile_snapshot);
+  });
+  test("legacy jobs without a profile snapshot remain journal-only", async () => {
+    const state = storageAndDatabase(); state.row.image_prompt = null;
+    dependencies.summarize.mockResolvedValue({ title: "산책", summary: "공원을 걸었다.", image_prompt: "A park", tags: [], scene: "park" });
+    expect(await processOne()).toEqual({ processed: true, status: "ready" });
+    expect(dependencies.summarize).toHaveBeenCalledExactlyOnceWith(state.row.entry_snapshot, "watercolor", {});
+  });
+  test("resuming a saved prompt does not re-extract or resend profile context", async () => {
+    const state = storageAndDatabase(); state.row.profile_snapshot = { occupation: "사서" };
+    expect(await processOne()).toEqual({ processed: true, status: "ready" });
+    expect(dependencies.summarize).not.toHaveBeenCalled();
+    expect(dependencies.illustrate).toHaveBeenCalledExactlyOnceWith("A gentle watercolor scene");
+  });
   test("keeps the uploaded image after a normal completed write", async () => {
     const state = storageAndDatabase();
     expect(await processOne()).toEqual({ processed: true, status: "ready" });

@@ -121,6 +121,11 @@ function Me() {
         </section>
 
         <nav className={s.list} aria-label="바로가기">
+          <Link href="/profile?step=details" className={s.row}>
+            <span>그림 속 내 모습</span>
+            <span className={s.meta}>{profile.consent && profile.artProfileEnabled ? "그림에 반영 중" : "선택 정보 설정"}</span>
+            <IconNext />
+          </Link>
           <Link href="/exhibition" className={s.row}>
             <span>내 전시회</span>
             <span className={s.meta}>
