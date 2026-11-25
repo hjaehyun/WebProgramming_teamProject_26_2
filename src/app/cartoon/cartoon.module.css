@@ -6,6 +6,10 @@
 .titleRow h1 { margin: 0; font-size: 45px; font-weight: 800; letter-spacing: -.08em; line-height: 1.4; }
 .titleDot { color: #A74430; }
 .dek { margin: 4px 0 18px; font-size: 13px; line-height: 1.75; color: #686355; }
+.sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 15px; }
+.sections a { min-width: 0; padding: 11px 8px; border: 1px solid #d7d0c0; color: #777367; text-decoration: none; font-size: 13px; font-weight: 700; text-align: center; }
+.sections a span { display: block; margin-top: 4px; font-size: 10px; font-weight: 400; }
+.sections a[aria-current="page"] { border-color: #a99578; background: #eee7d9; color: #6a5032; }
 .editionRow { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 0; border-top: 1px solid var(--paper-line); }
 .editionTag { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: #645F53; }
 .editionTag i { width: 5px; height: 5px; border-radius: 50%; background: #A74430; }

@@ -46,6 +46,8 @@ function Detail({ date, today }) {
   const [editingId, setEditingId] = useState(null); // fragment whose text is in the input
   const [draft, setDraft] = useState("");
   const [removing, setRemoving] = useState(false); // last fragment (and the picture) being removed
+  const [connecting, setConnecting] = useState(false);
+  const connectionOpening = useRef(false);
   const input = useRef(null);
   const [songBusy, setSongBusy] = useState(false);
   const [songNote, setSongNote] = useState(null); // { date, text }: shown only on the picture it belongs to
@@ -79,7 +81,7 @@ function Detail({ date, today }) {
 
   /** Save the input first, then wait for every fragment write before drawing this day's snapshot. */
   async function redraw() {
-    if (redrawing || removing || (art && !art.canRetry) || (!entries.length && !draft.trim()) || (editingId && !draft.trim())) return;
+    if (redrawing || removing || connecting || (art && !art.canRetry) || (!entries.length && !draft.trim()) || (editingId && !draft.trim())) return;
     const style = db.profile?.style ?? art?.style;
     if (art && !confirm(
       `${withParticle(style)} ${art.status === "failed" ? "다시 시도할까요?" : "다시 그릴까요?"}\n${draft.trim() ? "입력 중인 조각을 먼저 저장해요. " : art.entriesChanged ? "지금의 조각으로 새로 그려요. " : ""}이날 그림은 실패를 포함해 총 3회까지 생성할 수 있어요. 새 그림이 완성되면 바뀝니다.`,
@@ -116,7 +118,37 @@ function Detail({ date, today }) {
   }
 
   // A valid unpictured day can be written too; a queued or processing picture stays locked.
-  const editable = (!art || ["ready", "failed"].includes(art.status)) && !redrawing && !removing;
+  const editable = (!art || ["ready", "failed"].includes(art.status)) && !redrawing && !removing && !connecting;
+
+  async function openConnection() {
+    if (connectionOpening.current || redrawing || removing || (editingId && !draft.trim())) return;
+    if (draft.trim() && !editable) {
+      alert("그림을 만드는 동안에는 입력 중인 조각을 저장할 수 없어요. 그림이 완성된 뒤 저장하고 이동해 주세요.");
+      return;
+    }
+    connectionOpening.current = true;
+    setConnecting(true);
+    let submitted = null;
+    try {
+      const text = draft.trim();
+      if (text && editable) {
+        if (editingId) {
+          const old = entries.find(entry => entry.id === editingId);
+          if (!old) throw new Error("수정 중인 조각을 찾지 못했어요. 기록을 다시 확인해 주세요.");
+          if (old.text !== text) editEntry(date, editingId, text);
+          submitted = { id: editingId, text };
+        } else submitted = { id: addEntry(date, text).id, text };
+      }
+      await flushEntries();
+      cancelEdit();
+      router.push(`/connection?date=${date}`);
+    } catch (error) {
+      const latest = await refresh();
+      const saved = latest?.artworks?.[date]?.entries ?? latest?.drafts?.[date] ?? [];
+      if (submitted && saved.some(entry => entry.id === submitted.id && entry.text === submitted.text)) cancelEdit();
+      alert(error instanceof Error ? error.message : "조각을 저장하지 못했어요. 다시 확인해 주세요.");
+    } finally { connectionOpening.current = false; setConnecting(false); }
+  }
 
   function submit() {
     const text = draft.trim();
@@ -238,6 +270,9 @@ function Detail({ date, today }) {
         <Link href={`/cartoon?date=${encodeURIComponent(date)}`} className={s.cartoonLink}>
           <span><small>같은 날, 다른 시선</small><strong>이날의 만평과 나란히 보기</strong></span><IconNext />
         </Link>
+        <button type="button" className={s.connectionLink} onClick={openConnection} disabled={connecting || redrawing || removing || !!(draft.trim() && !editable) || !!(editingId && !draft.trim())}>
+          <span><small>하루연결 · 내 기록에서 최근 뉴스로</small><strong>{connecting ? "조각을 저장하고 있어요…" : "내 하루와 이어지는 뉴스 보기"}</strong><span>{draft.trim() && !editable && !connecting ? "그림 완성 후 입력한 조각을 저장하고 이동해 주세요." : draft.trim() ? "입력 중인 조각을 저장하고 이동해요." : "그림이 없어도 글로 연결할 수 있어요."}</span></span><IconNext />
+        </button>
 
         {art && <SongCard
           available={!!db.capabilities?.music}
@@ -339,7 +374,7 @@ function Detail({ date, today }) {
         <button
           className="btn ghost"
           onClick={redraw}
-          disabled={redrawing || removing || !art.canRetry || (!entries.length && !draft.trim()) || !!(editingId && !draft.trim())}
+          disabled={redrawing || removing || connecting || !art.canRetry || (!entries.length && !draft.trim()) || !!(editingId && !draft.trim())}
           title={!entries.length && !draft.trim() ? "조각을 남기면 그림을 그릴 수 있어요" : undefined}
         >
           {redrawing ? "그리는 중…" : art.status === "failed" ? "다시 시도" : "다시 그리기"}
@@ -347,7 +382,7 @@ function Detail({ date, today }) {
         <button className={inShow ? "btn ghost" : "btn"} onClick={() => toggleExhibit(date)} disabled={exhibitionSaving || (redrawing && !inShow) || !canChooseExhibitionArtwork(art, db.exhibition.dates)}>
           {inShow ? "전시회에서 내리기" : "전시회에 걸기"}
         </button>
-        </> : <button className="btn" onClick={redraw} disabled={redrawing || removing || (!entries.length && !draft.trim()) || !!(editingId && !draft.trim())}>
+        </> : <button className="btn" onClick={redraw} disabled={redrawing || removing || connecting || (!entries.length && !draft.trim()) || !!(editingId && !draft.trim())}>
           {redrawing ? "그림을 준비하는 중…" : draft.trim() ? "조각 저장하고 그림 그리기" : "이날의 그림 그리기"}
         </button>}
       </div>

@@ -212,7 +212,7 @@ function Profile() {
 
       <div className="bar">
         <div>
-          <label><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /> 조각글·작성 시각을 OpenAI로 보내 장면과 그림을 만드는 데 동의해요.</label>
+          <label><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /> 조각글·작성 시각·저장된 장면 요약과 태그를 OpenAI로 보내 그림·큐레이터 해설·하루연결의 주제를 만드는 데 동의해요.</label>
           <p><Link href="/privacy">전송 정보 확인</Link> · 동의하지 않아도 글은 저장할 수 있어요.</p>
           {saveError && <p role="alert">{saveError}</p>}
         </div>

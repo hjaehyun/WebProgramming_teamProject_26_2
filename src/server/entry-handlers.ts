@@ -24,9 +24,23 @@ export function entryPost(request:Request) { return run(async()=>{
 export function entryChange(request:Request,id:string,remove=false) {return run(async()=>{
   mutation(request);const {db,user}=await authenticated();z.uuid().parse(id);
   if(remove) {
+    // Capture only an owned connection ID before the last-entry trigger removes its row.
+    // A cleanup lookup must never make the established entry deletion unavailable.
+    let connectionId:string|null=null;
+    try {
+      const entry=await db.from("entries").select("entry_date").eq("id",id).eq("user_id",user.id).maybeSingle();
+      if(entry.data) {
+        const connected=await db.from("daily_connections").select("id").eq("user_id",user.id).eq("entry_date",entry.data.entry_date).maybeSingle();
+        connectionId=connected.data?.id??null;
+      }
+    } catch { /* New connection cleanup is best effort; account deletion also walks the user folder. */ }
     // Removing the last fragment of a day with a picture removes the picture too (returned id).
     const r=await db.rpc("remove_team_entry",{p_id:id});rpcError(r.error);
     if(r.data) await removeArtworkFiles(user.id,r.data);
+    if(connectionId) try {
+      const remaining=await db.from("daily_connections").select("id").eq("user_id",user.id).eq("id",connectionId).maybeSingle();
+      if(!remaining.error&&!remaining.data) await removeArtworkFiles(user.id,`connection-${connectionId}`);
+    } catch { console.warn("Connection file cleanup deferred"); }
     return json({ok:true,artworkRemoved:Boolean(r.data)});
   }
   const p=z.object({text:entrySchema.shape.content}).parse(await body(request));

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Picture from "@/components/Picture";
 import Weather from "@/components/Weather";
@@ -23,12 +24,15 @@ export default function TodayPage() {
 
 // Stage reflects the saved server job, including after refresh or automatic close.
 function Today() {
+  const router = useRouter();
   const { db, addEntry, editEntry, removeEntry, applyArtwork, flushEntries, refresh } = useStore();
   const date = todayKey();
   const art = db.artworks[date];
   const style = db.profile.style;
 
   const [requesting, setRequesting] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const connectionOpening = useRef(false);
   const stage = art?.status === "ready" ? 3 : art?.status === "failed" ? 4 : art ? (art.phase === "drawing" ? 2 : 1) : requesting ? 1 : 0;
   const [draft, setDraft] = useState("");
   const [hint, setHint] = useState(null);
@@ -49,7 +53,7 @@ function Today() {
 
   function add() {
     const text = draft.trim();
-    if (!text || stage > 0) return;
+    if (!text || stage > 0 || connecting) return;
     if (editingId) {
       // Only send when the text really changed.
       const old = entries.find((e) => e.id === editingId);
@@ -67,6 +71,7 @@ function Today() {
 
   // Starts editing: the text goes to the input, the original stays saved until "저장".
   function edit(id, text) {
+    if (connecting) return;
     setEditingId(id);
     setDraft(text);
     setHint(null);
@@ -80,12 +85,13 @@ function Today() {
   }
 
   function remove(id) {
+    if (connecting) return;
     if (id === editingId) cancelEdit();
     removeEntry(date, id);
   }
 
   async function close() {
-    if (requesting) return;
+    if (requesting || connecting) return;
     if (editingId) cancelEdit();
     setOpenId(null);
     setRequesting(true);
@@ -98,6 +104,36 @@ function Today() {
       await refresh();
       setRequesting(false);
     }
+  }
+
+  async function openConnection() {
+    if (connectionOpening.current || requesting || (editingId && !draft.trim())) return;
+    if (draft.trim() && stage > 0 && stage < 3) {
+      alert("그림을 만드는 동안에는 입력 중인 조각을 저장할 수 없어요. 그림이 완성된 뒤 저장하고 이동해 주세요.");
+      return;
+    }
+    connectionOpening.current = true;
+    setConnecting(true);
+    let submitted = null;
+    try {
+      const text = draft.trim();
+      if (text) {
+        if (editingId) {
+          const old = entries.find(entry => entry.id === editingId);
+          if (!old) throw new Error("수정 중인 조각을 찾지 못했어요. 기록을 다시 확인해 주세요.");
+          if (old.text !== text) editEntry(date, editingId, text);
+          submitted = { id: editingId, text };
+        } else submitted = { id: addEntry(date, text).id, text };
+      }
+      await flushEntries();
+      cancelEdit();
+      router.push(`/connection?date=${date}`);
+    } catch (error) {
+      const latest = await refresh();
+      const saved = latest?.artworks?.[date]?.entries ?? latest?.drafts?.[date] ?? [];
+      if (submitted && saved.some(entry => entry.id === submitted.id && entry.text === submitted.text)) cancelEdit();
+      alert(error instanceof Error ? error.message : "조각을 저장하지 못했어요. 다시 확인해 주세요.");
+    } finally { connectionOpening.current = false; setConnecting(false); }
   }
 
   const pieces = Array.from({ length: Math.min(8, Math.max(6, n)) }, (_, i) => i < n);
@@ -156,7 +192,7 @@ function Today() {
                   </span>
                   <button
                     className={`hand ${s.bubble} ${open || editing ? s.sel : ""}`}
-                    onClick={() => stage === 0 && setOpenId(open ? null : e.id)}
+                    onClick={() => stage === 0 && !connecting && setOpenId(open ? null : e.id)}
                     aria-expanded={open}
                   >
                     {e.text}
@@ -209,12 +245,15 @@ function Today() {
             <span className={s.resultText}><strong>그림을 완성하지 못했어요</strong><span>상태 확인하고 다시 시도하기</span></span>
           </Link>
         )}
+        {(n > 0 || draft.trim()) && <button type="button" className="btn ghost" onClick={openConnection} disabled={connecting || requesting || !!(draft.trim() && stage > 0 && stage < 3) || !!(editingId && !draft.trim())}>
+          {connecting ? "조각을 저장하고 있어요…" : draft.trim() && stage > 0 && stage < 3 ? "그림 완성 후 조각을 저장해 주세요" : draft.trim() ? "조각 저장하고 하루연결 보기" : "하루연결 · 내 기록과 닿은 뉴스"}
+        </button>}
       </main>
 
       {stage === 0 && n > 0 && !editingId && (
         <div className={s.closeBar}>
           <span>하루를 마무리할까요?</span>
-          <button onClick={close}>오늘 마감하고 그림 그리기</button>
+          <button onClick={close} disabled={connecting}>오늘 마감하고 그림 그리기</button>
         </div>
       )}
 
@@ -257,7 +296,7 @@ function Today() {
               if (e.key === "Enter" && !e.nativeEvent.isComposing) add();
               if (e.key === "Escape" && editingId) cancelEdit();
             }}
-            disabled={stage > 0}
+            disabled={stage > 0 || connecting}
             placeholder={
               stage > 0 ? "오늘은 마감했어요" : editingId ? "고칠 내용을 한 줄로…" : hint ? `${hint} 한 줄로…` : "생각난 걸 한 줄로…"
             }
@@ -266,7 +305,7 @@ function Today() {
           <button
             className={s.send}
             onClick={add}
-            disabled={stage > 0 || !draft.trim()}
+            disabled={stage > 0 || connecting || !draft.trim()}
             aria-label={editingId ? "수정 저장" : "조각 올리기"}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

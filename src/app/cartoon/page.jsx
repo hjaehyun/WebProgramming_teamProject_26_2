@@ -60,6 +60,10 @@ function Edition({ requestedDate, autoRequested }) {
           <div className={s.nameplate}><span>HARU DAILY</span><span>하루조각의 작은 신문</span></div>
           <div className={s.titleRow}><h1>하루만평<span className={s.titleDot}>.</span></h1><ProfileButton /></div>
           <p className={s.dek}>나의 하루와 세상의 하루,<br />같은 날짜의 두 장면을 펼쳐보세요.</p>
+          <nav className={s.sections} aria-label="뉴스 그림 메뉴">
+            <Link href={`/cartoon?date=${date}`} aria-current="page">하루만평 <span>함께 보는 뉴스</span></Link>
+            <Link href={`/connection?date=${date}`}>하루연결 <span>내 기록과 닿은 뉴스</span></Link>
+          </nav>
           <div className={s.editionRow}>
             <span className={s.editionTag}><i aria-hidden="true" />하루 한 장 · 함께 보는 만평</span>
             <label className={s.datePicker}><span className="sr-only">만평 날짜</span>

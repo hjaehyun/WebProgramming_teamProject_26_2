@@ -113,6 +113,12 @@ function Gallery({ month, today }) {
           <IconNext />
         </Link>
 
+        <Link href="/connection" className={s.connection}>
+          <span className={s.connectionMark} aria-hidden="true">↗</span>
+          <span><small>하루연결 · 나만의 뉴스</small><strong>내 일기에서 지금 세상으로</strong><span>기록과 닿은 최근 뉴스, 두 장의 그림으로.</span></span>
+          <IconNext />
+        </Link>
+
         <section className={s.recent}>
           <h2>최근 그림</h2>
           <div className={s.recentGrid}>
