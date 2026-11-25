@@ -79,7 +79,8 @@ const TABS = [
   },
   {
     href: "/cartoon",
-    label: "하루만평",
+    label: "하루세상",
+    routes: ["/cartoon", "/connection"],
     icon: (
       <>
         <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -94,7 +95,7 @@ export function BottomNav() {
   return (
     <nav className="nav" aria-label="주 메뉴">
       {TABS.map((t) => (
-        <Link key={t.href} href={t.href} aria-current={path.startsWith(t.href) ? "page" : undefined}>
+        <Link key={t.href} href={t.href} aria-current={(t.routes ?? [t.href]).some(route => path === route || path.startsWith(`${route}/`)) ? "page" : undefined}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             {t.icon}
           </svg>

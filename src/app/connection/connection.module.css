@@ -15,6 +15,22 @@
 .dateCard select { width: 100%; min-height: 47px; margin-top: 6px; padding: 10px 26px 10px 12px; border: 1px solid #cdd1d9; border-radius: 8px; background: #fffdf8; color: #303a4b; font: 600 14px var(--font-sans); }
 .dateCard p { margin: 8px 0 18px; color: #707583; font-size: 11px; line-height: 1.7; word-break: keep-all; }
 .dateCard strong { font-weight: 600; color: #455585; }
+.dateRow { display: flex; align-items: center; gap: 8px; margin: 6px 0 12px; }
+.dateRow select { flex: 1; min-width: 0; margin: 0; }
+.dateRow button { flex-shrink: 0; min-height: 47px; padding: 8px 11px; border: 1px solid #cdd1d9; border-radius: 8px; background: #e9edf7; color: #384b80; font: 600 12px var(--font-sans); cursor: pointer; }
+.dateRow button:disabled { opacity: .5; cursor: default; }
+.storyLead { margin: 20px 0 15px; }
+.storyLead h2 { margin: 9px 0; font-size: 24px; line-height: 1.5; letter-spacing: -.04em; word-break: keep-all; overflow-wrap: anywhere; }
+.primarySource { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 42px; color: #707583; font-size: 10px; line-height: 1.7; text-decoration: none; }
+.primarySource strong { flex-shrink: 0; color: #455585; font-size: 12px; }
+.leadRange { margin: 4px 0 0; color: #707583; font-size: 10px; line-height: 1.6; }
+.reconnect { margin-top: 24px; border-top: 1px solid #d4d7dc; }
+.reconnect > summary { min-height: 48px; padding: 14px 0; color: #455585; font-size: 13px; cursor: pointer; }
+.reconnect > summary span { display: block; margin: 5px 0 0 15px; color: #7b8190; font-size: 10px; }
+.changeSummary { margin: 10px 0; border: 1px solid #dbcbb8; border-radius: 7px; background: #f7eee2; color: #775c40; font-size: 11px; }
+.changeSummary > summary { min-height: 38px; padding: 10px 12px; cursor: pointer; }
+.changeSummary .changed { margin: 0 12px 10px; padding: 0; border: 0; }
+.changeSummary > a { display: inline-block; min-height: 40px; padding: 6px 12px 12px; color: #775c40; }
 .requestCard { padding: 16px; border: 1px solid #d3d8e5; border-radius: 13px; background: #f1f3f9; box-shadow: 0 3px 0 #333d5a05; }
 .requestHeading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
 .smallLabel { color: #687590; font-size: 10px; }

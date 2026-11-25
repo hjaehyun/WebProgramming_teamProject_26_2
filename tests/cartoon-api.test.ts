@@ -185,9 +185,10 @@ describe("cartoon public DTO", () => {
       image_path: `${date}/internal-token.png`, image_prompt: "INTERNAL_PROMPT", claim_token: "INTERNAL_CLAIM", claimed_at: now.toISOString(), attempts: 2,
       selected_at: now.toISOString(), completed_at: now.toISOString(), error_message: null, entry_snapshot: "PRIVATE_JOURNAL", user_id: "PRIVATE_USER", created_at: "INTERNAL_CREATED_AT" });
     const response = await get(); expect(response.status).toBe(200); const payload = await response.json();
-    expect(Object.keys(payload.cartoon).sort()).toEqual(["date", "status", "stage", "headline", "summary", "selectionReason", "caption", "sources", "imageUrl", "imageError", "selectedAt", "completedAt", "error"].sort());
+    expect(Object.keys(payload.cartoon).sort()).toEqual(["date", "status", "stage", "headline", "summary", "selectionReason", "caption", "sources", "imageUrl", "imageError", "selectedAt", "completedAt", "error", "attempts", "maxAttempts"].sort());
+    expect(payload.cartoon).toMatchObject({ attempts: 2, maxAttempts: 3 });
     const serialized = JSON.stringify(payload);
-    for (const privateValue of ["image_path", "image_prompt", "claim_token", "claimed_at", "attempts", "entry_snapshot", "user_id", "INTERNAL_PROMPT", "INTERNAL_CLAIM", "PRIVATE_JOURNAL", "PRIVATE_USER", "INTERNAL_CREATED_AT"]) expect(serialized).not.toContain(privateValue);
+    for (const privateValue of ["image_path", "image_prompt", "claim_token", "claimed_at", "entry_snapshot", "user_id", "INTERNAL_PROMPT", "INTERNAL_CLAIM", "PRIVATE_JOURNAL", "PRIVATE_USER", "INTERNAL_CREATED_AT"]) expect(serialized).not.toContain(privateValue);
     expect(f.tables).toEqual(["daily_cartoons", "daily_cartoons"]);
     expect(f.sign).toHaveBeenCalledWith(`${date}/internal-token.png`, 3600);
   });

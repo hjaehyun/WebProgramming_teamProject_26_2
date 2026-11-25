@@ -85,7 +85,7 @@ async function allArtworks(db: SupabaseClient, userId: string) {
   }
 }
 export async function dashboard(db: SupabaseClient, user: User, profile: Row) {
-  const account = { email:user.email??"", joinedAt:user.created_at, ...accountInfo(user.identities) };
+  const account = { id:user.id,email:user.email??"", joinedAt:user.created_at, ...accountInfo(user.identities) };
   const profileInfo = { nick:profile.nickname,style:toStyle(profile.art_style),consent:!!profile.ai_consent_at,
     artProfile:artProfileView(profile.art_profile),artProfileEnabled:!!profile.art_profile_enabled && !!profile.ai_consent_at };
   if (profile.deleting_at) return {

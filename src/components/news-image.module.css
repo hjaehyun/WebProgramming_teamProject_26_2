@@ -1,0 +1,15 @@
+.trigger { position: relative; padding: 0; border: 0; cursor: zoom-in; color: inherit; }
+.trigger:focus-visible { outline: 3px solid #647db9; outline-offset: 3px; }
+.hint { position: absolute; right: 6px; bottom: 6px; padding: 4px 7px; border-radius: 4px; background: #242c3bcc; color: #fff; font-size: 10px; line-height: 1.4; }
+.modal { width: min(94vw, 920px); max-width: 94vw; max-height: 94dvh; margin: auto; padding: 0; border: 1px solid #d6d2c6; border-radius: 12px; background: #f7f5ee; color: #303a4b; box-shadow: 0 20px 80px #0005; }
+.modal::backdrop { background: #1e242bd9; }
+.content { padding: 14px; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.heading h2 { margin: 0; font-size: 15px; line-height: 1.5; }
+.heading button, .error button { min-height: 44px; padding: 8px 12px; border: 1px solid #aeb5c2; border-radius: 6px; background: #fffdf8; color: #384768; font: inherit; cursor: pointer; }
+.heading button span { margin-left: 5px; font-size: 20px; }
+.heading button:focus-visible, .error button:focus-visible { outline: 3px solid #647db9; outline-offset: 2px; }
+.largeImage { display: block; width: 100%; max-height: 72dvh; object-fit: contain; background: #eae8e1; }
+.caption { margin: 12px 2px 0; color: #626a79; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.error { padding: 32px 12px; text-align: center; }
+@media (max-width: 480px) { .content { padding: 10px; } .largeImage { max-height: 68dvh; } }

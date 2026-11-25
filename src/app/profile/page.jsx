@@ -12,6 +12,8 @@ import s from "./profile.module.css";
 const emptyArtProfile = () => ({ gender: "unspecified", ageRange: "unspecified", occupation: "", appearance: "" });
 const genderOptions = [["unspecified", "선택 안 함"], ["female", "여성적인 모습"], ["male", "남성적인 모습"], ["neutral", "중성적인 모습"]];
 const ageOptions = [["unspecified", "선택 안 함"], ["child", "어린이"], ["teen", "10대"], ["20s", "20대"], ["30s", "30대"], ["40s", "40대"], ["50s", "50대"], ["60plus", "60대 이상"]];
+// The profile API stores single-line descriptions; the textarea wraps them visually.
+const singleLineDetails = value => value.replace(/[\u0000-\u001f\u007f]+/g, " ");
 
 // useSearchParams needs a Suspense boundary so the page can still be prerendered.
 export default function ProfilePage() {
@@ -174,11 +176,14 @@ function Profile() {
                   </select>
                 </label>
               </div>
-              <label className={s.detailField} htmlFor="art-occupation"><span>하는 일</span>
-                <input id="art-occupation" value={artProfile.occupation} onChange={event => setArtProfile(previous => ({ ...previous, occupation: event.target.value }))} maxLength={80} placeholder="예: 대학생, 개발자, 정원사" autoComplete="off" disabled={saving} />
+              <label className={s.detailField} htmlFor="art-occupation">
+                <span className={s.fieldHeading}><span>하는 일</span><span id="art-occupation-count" className={s.fieldCount}>{artProfile.occupation.length}/80자</span></span>
+                <input id="art-occupation" value={artProfile.occupation} onChange={event => setArtProfile(previous => ({ ...previous, occupation: singleLineDetails(event.target.value) }))} maxLength={80} placeholder="예: 대학생, 개발자, 정원사" autoComplete="off" disabled={saving} aria-describedby="art-occupation-count" />
               </label>
-              <label className={s.detailField} htmlFor="art-appearance"><span>외형 특징</span>
-                <input id="art-appearance" value={artProfile.appearance} onChange={event => setArtProfile(previous => ({ ...previous, appearance: event.target.value }))} maxLength={200} placeholder="예: 짧은 머리, 둥근 안경" autoComplete="off" disabled={saving} />
+              <label className={s.detailField} htmlFor="art-appearance">
+                <span className={s.fieldHeading}><span>외형 특징</span><span id="art-appearance-count" className={s.fieldCount}>{artProfile.appearance.length}/200자</span></span>
+                <textarea id="art-appearance" value={artProfile.appearance} onChange={event => setArtProfile(previous => ({ ...previous, appearance: singleLineDetails(event.target.value) }))} rows={3} maxLength={200} placeholder="예: 짧은 머리, 둥근 안경" autoComplete="off" disabled={saving} aria-describedby="art-appearance-hint art-appearance-count" />
+                <span id="art-appearance-hint" className={s.fieldHint}>특징은 쉼표로 나눠 적어주세요. 줄바꿈은 띄어쓰기로 바뀌어요.</span>
               </label>
               <div className={s.applyBox}>
                 <label className={s.applyToggle} htmlFor="art-profile-enabled"><input id="art-profile-enabled" type="checkbox" checked={artProfileEnabled} disabled={!consent || saving} onChange={event => setArtProfileEnabled(event.target.checked)} aria-describedby="art-profile-explanation" /><span>내 그림에 반영하기</span></label>
@@ -249,14 +254,18 @@ function Profile() {
             </div>
           </div>
         )}
+        <section className={s.consentBox} aria-label="AI 전송 동의">
+          <label className={s.applyToggle} htmlFor="ai-consent">
+            <input id="ai-consent" type="checkbox" checked={consent} disabled={saving} onChange={e => { setConsent(e.target.checked); if (!e.target.checked) setArtProfileEnabled(false); }} aria-describedby="ai-consent-description ai-consent-optional" />
+            <span>AI 전송에 동의해요 <span className={s.optional}>(선택)</span></span>
+          </label>
+          <p id="ai-consent-description">조각글·작성 시각·저장된 장면 요약과 태그를 OpenAI로 보내 그림·큐레이터 해설·하루연결의 주제를 만들어요. ‘내 그림에 반영하기’를 켠 프로필 정보는 내 그림 생성에도 사용돼요.</p>
+          <p id="ai-consent-optional">동의하지 않아도 글은 저장할 수 있어요. <Link href="/privacy">전송 정보 확인</Link></p>
+        </section>
       </main>
 
-      <div className="bar">
-        <div>
-          <label><input id="ai-consent" type="checkbox" checked={consent} onChange={e => { setConsent(e.target.checked); if (!e.target.checked) setArtProfileEnabled(false); }} /> 조각글·작성 시각·저장된 장면 요약과 태그를 OpenAI로 보내 그림·큐레이터 해설·하루연결의 주제를 만드는 데 동의해요. ‘내 그림에 반영하기’를 켠 프로필 정보는 내 그림 생성에도 사용돼요.</label>
-          <p><Link href="/privacy">전송 정보 확인</Link> · 동의하지 않아도 글은 저장할 수 있어요.</p>
-          {saveError && <p role="alert">{saveError}</p>}
-        </div>
+      <div className={`bar ${s.actions}`}>
+        {saveError && <p className={s.saveError} role="alert">{saveError}</p>}
         {step !== "style" ? (
           <button className="btn" onClick={next} disabled={!name || saving}>
             {saving ? "저장하는 중…" : editing ? "프로필 저장하기" : "다음"}

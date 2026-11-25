@@ -77,6 +77,11 @@ beforeEach(()=>{
 afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();});
 
 describe("authenticated API boundaries",()=>{
+  test("private dashboard identifies the authenticated owner for session-only draft isolation",async()=>{
+    const response=await me();
+    expect(response.status).toBe(200);
+    expect((await response.json()).account.id).toBe(alice);
+  });
   test("rejects cross-origin writes before authentication or job creation",async()=>{
     const r=await artworkPost(request("/api/artworks",{date,requestId},"https://another.invalid"));
     expect(r.status).toBe(403);expect(mocks.userClient).not.toHaveBeenCalled();expect(mocks.processOne).not.toHaveBeenCalled();

@@ -8,7 +8,9 @@ vi.mock("../src/components/ui", () => ({ IconBack: () => null }));
 vi.mock("../src/components/Art", () => ({ default: () => null }));
 vi.mock("next/navigation", () => ({ useSearchParams: mocks.search, useRouter: () => ({ push: mocks.push, replace: mocks.replace }) }));
 vi.mock("next/link", () => ({ default: ({ children }: React.PropsWithChildren) => children }));
+vi.mock("server-only", () => ({}));
 import ProfilePage from "../src/app/profile/page";
+import { artProfileSchema } from "../src/server/core/art-profile";
 
 type Element = React.ReactElement<Record<string, any>>;
 const details = { gender: "neutral", ageRange: "30s", occupation: "개발자", appearance: "짧은 머리, 둥근 안경" };
@@ -64,7 +66,7 @@ function mount(profile: Record<string, unknown> | null = null, query = "") {
     field(id).props.onChange({ target: typeof value === "boolean" ? { checked: value } : { value } }); render();
   };
   render();
-  return { save, render, all: () => all(tree), field, button, change, text: () => text(tree) };
+  return { save, render, all: (node: unknown = tree) => all(node), field, button, change, text: (node: unknown = tree) => text(node) };
 }
 
 beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal("React", React); });
@@ -105,11 +107,44 @@ describe("optional illustration profile", () => {
       artProfile: { ...details, occupation: "대학원생", appearance: "긴 머리" }, artProfileEnabled: true });
   });
 
+  test("descriptions remain readable and count normalized input that the profile API accepts", async () => {
+    const page = mount({ nick: "나", style: "water", consent: true, artProfile: details, artProfileEnabled: true }, "step=details");
+    expect(page.field("art-appearance").type).toBe("textarea");
+    expect(page.field("art-appearance").props).toMatchObject({ rows: 3, maxLength: 200, value: details.appearance });
+    expect(page.field("art-appearance").props["aria-describedby"]).toContain("art-appearance-count");
+    page.change("art-appearance", "짧은 머리\r\n둥근 안경\t갈색 옷\u0000");
+    page.change("art-occupation", "개발자\n학생");
+    expect(page.field("art-appearance").props.value).toBe("짧은 머리 둥근 안경 갈색 옷 ");
+    expect(page.text(page.field("art-appearance-count"))).toBe(`${page.field("art-appearance").props.value.length}/200자`);
+    expect(page.text(page.field("art-occupation-count"))).toBe("6/80자");
+    await page.button("프로필 저장하기").props.onClick();
+    const saved = page.save.mock.calls[0][0].artProfile;
+    expect(saved).toMatchObject({ occupation: "개발자 학생", appearance: "짧은 머리 둥근 안경 갈색 옷" });
+    expect(artProfileSchema.safeParse(saved).success).toBe(true);
+  });
+
+  test.each(["step=details", "step=style"])("AI consent stays in the scrolling content and save errors stay beside the action in %s", async query => {
+    const page = mount({ nick: "나", style: "water", consent: true, artProfile: details, artProfileEnabled: true }, query);
+    const main = page.all().find(node => node.type === "main")!;
+    const footer = page.all().find(node => typeof node.props.className === "string" && node.props.className.split(" ").includes("bar"))!;
+    expect(page.all(main).some(node => node.props.id === "ai-consent")).toBe(true);
+    expect(page.all(footer).some(node => node.type === "input")).toBe(false);
+    page.save.mockRejectedValueOnce(new Error("프로필을 저장하지 못했어요."));
+    await page.button(query === "step=style" ? "수채화로 저장하기" : "프로필 저장하기").props.onClick();
+    page.render();
+    const updatedFooter = page.all().find(node => typeof node.props.className === "string" && node.props.className.split(" ").includes("bar"))!;
+    const error = page.all(updatedFooter).find(node => node.props.role === "alert");
+    expect(page.text(error)).toBe("프로필을 저장하지 못했어요.");
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
   test("style-only editing preserves stored detailed information and its enabled choice", async () => {
     const page = mount({ nick: "나", style: "pencil", consent: true, artProfile: details, artProfileEnabled: true }, "step=style");
     expect(page.text()).toContain("어떤 그림체로 바꿀까요?");
-    await page.button("색연필로 저장하기").props.onClick();
-    expect(page.save).toHaveBeenCalledWith({ nick: "나", style: "pencil", consent: true, artProfile: details, artProfileEnabled: true });
+    const nextStyle = page.all().find(node => node.type === "button" && node.props.role === "radio" && !node.props["aria-checked"])!;
+    nextStyle.props.onClick(); page.render();
+    await page.button("수채화로 저장하기").props.onClick();
+    expect(page.save).toHaveBeenCalledWith({ nick: "나", style: "water", consent: true, artProfile: details, artProfileEnabled: true });
   });
 
   test("withdrawing AI consent disables detailed profile use and reconsenting does not silently reenable it", async () => {
@@ -151,6 +186,7 @@ describe("optional illustration profile", () => {
     page.save.mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
     const saving = page.button("수채화로 시작하기").props.onClick(); page.render();
     expect(mocks.push).not.toHaveBeenCalled();
+    expect(page.field("ai-consent").props.disabled).toBe(true);
     expect(page.save.mock.calls[0][0]).toEqual({ nick: "첫 기록", style: "water", consent: true, artProfileEnabled: true,
       artProfile: { gender: "female", ageRange: "20s", occupation: "학생", appearance: "안경" } });
     finish(); await saving;

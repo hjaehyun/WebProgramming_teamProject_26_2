@@ -33,7 +33,11 @@ export function StoreProvider({ children }) {
   const [db, setDb] = useState(null);
   const [authed, setAuthed] = useState(false);
   const [error, setError] = useState(null);
+  // Unsubmitted historical-day text lives only in this login session. Route
+  // changes (including browser Back) may unmount its page without losing it.
+  const [journalComposers, setJournalComposers] = useState({});
   const sessionVersion = useRef(0);
+  const sessionAccountId = useRef(null);
   const snapshotSync = useRef(createSnapshotSync());
   const pendingEntries = useRef(createMutationQueue());
   const songRequests = useRef(new Map());
@@ -42,6 +46,8 @@ export function StoreProvider({ children }) {
   const [exhibitionSaving, setExhibitionSaving] = useState(false);
   const newSession = useCallback(() => {
     sessionVersion.current++;
+    sessionAccountId.current = null;
+    setJournalComposers({});
     snapshotSync.current = createSnapshotSync();
     pendingEntries.current = createMutationQueue();
     songRequests.current = new Map();
@@ -49,12 +55,24 @@ export function StoreProvider({ children }) {
     exhibitionRequest.current = false;
     setExhibitionSaving(false);
   }, []);
+  const hasJournalDraft = Object.values(journalComposers).some(value => value.draft || value.editingId || value.saving);
+  useEffect(() => {
+    if (!hasJournalDraft) return;
+    const warn = event => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasJournalDraft]);
   const refresh = useCallback(async (throwOnError = false) => {
     const version = sessionVersion.current;
     const sync = snapshotSync.current;
     try {
       const next = await sync.read(() => api("GET", "/api/me"), next => {
         if (version !== sessionVersion.current) return;
+        // A different tab can change the auth cookie without calling signIn here.
+        // Retire all old-account drafts and async callbacks before showing it.
+        const nextAccountId = next.account?.id ?? null;
+        if (sessionAccountId.current && sessionAccountId.current !== nextAccountId) newSession();
+        sessionAccountId.current = nextAccountId;
         // This snapshot was fetched after all pending entry writes settled.
         // A failed optimistic note is now gone from the authoritative UI, so it
         // must not permanently block later closing of successfully saved notes.
@@ -139,7 +157,17 @@ export function StoreProvider({ children }) {
       return saving;
     };
     return {
-      ready: db !== null, authed, error, db: cur, refresh, exhibitionSaving,
+      ready: db !== null, authed, error, db: cur, refresh, exhibitionSaving, journalComposers,
+      isCurrentSession: () => version === sessionVersion.current,
+      setJournalComposer: (date, patch) => {
+        if (version !== sessionVersion.current) return;
+        setJournalComposers(previous => {
+          const next = { ...previous };
+          if (patch === null) delete next[date];
+          else next[date] = { ...previous[date], ...patch };
+          return next;
+        });
+      },
       applyArtwork: a => { if (version === sessionVersion.current) applyArtwork(a); },
       signIn: async (email, password) => { await api("POST", "/api/auth/login", { email, password }); newSession(); return refresh(true); },
       signUp: async (email, password) => {
@@ -196,7 +224,7 @@ export function StoreProvider({ children }) {
       },
       setExhibitPublic: on => { report(saveExhibition({ isPublic: on })); },
     };
-  }, [db, authed, error, refresh, update, report, requestSong, applyArtwork, exhibitionSaving, saveExhibition, newSession, trackWrite]);
+  }, [db, authed, error, refresh, update, report, requestSong, applyArtwork, exhibitionSaving, saveExhibition, newSession, trackWrite, journalComposers]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 export function useStore() { const s = useContext(Ctx); if (!s) throw new Error("useStore must be used inside StoreProvider"); return s; }

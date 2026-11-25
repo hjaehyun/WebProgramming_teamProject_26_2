@@ -52,6 +52,7 @@ export async function cartoonPayload(db: SupabaseClient, date: string, now = new
       caption: row.caption, sources: row.sources ?? [], imageUrl,
       imageError: Boolean(row.status === "ready" && row.image_path && !imageUrl),
       selectedAt: row.selected_at, completedAt: row.completed_at, retryAt: row.attempts < 3 ? row.retry_after : null,
+      attempts: row.attempts, maxAttempts: 3,
       error: expired ? "이날의 만평 생성이 중단됐어요. 생성 시도 횟수를 모두 사용했어요." : row.error_message,
     } : null,
   };

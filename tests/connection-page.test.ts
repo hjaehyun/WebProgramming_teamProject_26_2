@@ -91,6 +91,13 @@ describe("private diary-to-news screen", () => {
     expect(html).toContain("저장된 결과예요");
     expect(html).toContain('href="https://news.example/article"');
     expect(html).toContain("내 하루와 이어지는 지점");
+    expect(html.indexOf("새 개발 도구가 바꾸는 코딩")).toBeLessThan(html.indexOf("원문 보기"));
+    expect(html.indexOf("원문 보기")).toBeLessThan(html.indexOf('src="https://images.example/news.png"'));
+    expect(html.indexOf('src="https://images.example/news.png"')).toBeLessThan(html.indexOf('aria-label="뉴스 연결 요청"'));
+    expect(html).toMatch(/<details[^>]*><summary>뉴스 다시 연결하기/);
+    expect(html).not.toMatch(/<details[^>]*open/);
+    expect(html).toContain('aria-label="연결된 뉴스 그림 크게 보기"');
+    expect(mocks.start).not.toHaveBeenCalled();
   });
 
   test("no-match is explicit and contains no invented generated image", () => {
@@ -143,5 +150,14 @@ describe("private diary-to-news screen", () => {
     const html = render();
     expect(html).not.toContain("javascript:");
     expect(html).not.toContain("unsafe");
+  });
+
+  test("dates use the same explicit apply and today controls as cartoons", () => {
+    const html = render();
+    expect(html).toContain('<button type="submit">보기</button>');
+    expect(html).toContain('<button type="button">오늘</button>');
+    expect(html).toContain('aria-label="하루세상 메뉴"');
+    expect(mocks.replace).not.toHaveBeenCalled();
+    expect(mocks.start).not.toHaveBeenCalled();
   });
 });
