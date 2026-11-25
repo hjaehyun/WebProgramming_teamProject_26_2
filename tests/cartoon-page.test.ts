@@ -93,6 +93,22 @@ describe("past-date cartoon screen", () => {
     expect(mocks.start).not.toHaveBeenCalled();
   });
 
+  test("an unavailable edition offers explicit news reselection when the server allows it", () => {
+    const cartoon = { date, status: "unavailable", attempts: 1, maxAttempts: 3, retryAt: null, error: "대표 뉴스를 찾지 못했어요." };
+    setPayload(payload({ cartoon, canRequest: true }));
+    const html = render();
+    expect(html).toContain("선정할 뉴스를 확인하지 못했어요");
+    expect(html).toContain("뉴스를 다시 검색해 대표 뉴스를 선정할 수 있어요.");
+    expect(html).toContain("뉴스 다시 선정하기");
+    expect(html).toContain("1 / 3회 사용");
+    expect(mocks.start).not.toHaveBeenCalled();
+    setPayload(payload({ cartoon, canRequest: false }));
+    expect(render()).not.toContain("뉴스 다시 선정하기");
+    setPayload(payload({ cartoon, canRequest: true }), { posting: true });
+    expect(render()).toContain("대표 뉴스를 살펴보고 있어요");
+    expect(render()).not.toContain("뉴스 다시 선정하기");
+  });
+
   test("a completed edition puts its original source before the expandable stored pictures", () => {
     setPayload(payload({ canRequest: false, cartoon: { date, status: "ready", headline: "저장된 만평 제목", caption: "저장된 실제 그림", imageUrl: "https://images.example/cartoon.png", sources: [{ url: "https://news.example/story", publisher: "검증된 매체", publishedAt: "2026-11-04T10:00:00Z" }] } }));
     const html = render();
@@ -104,22 +120,24 @@ describe("past-date cartoon screen", () => {
     expect(html).not.toMatch(/<details[^>]*open/);
   });
 
-  test("a cooldown displays its exact retry time instead of a stale relative delay", () => {
-    setPayload(payload({ canRequest: false, cartoon: { date, status: "failed", attempts: 1, maxAttempts: 3, retryAt: "2026-11-25T10:15:00Z", error: "15분 뒤 다시 시도할 수 있어요." } }));
+  test.each(["failed", "unavailable"])("a %s cooldown displays its exact retry time instead of a stale relative delay", status => {
+    setPayload(payload({ canRequest: false, cartoon: { date, status, attempts: 1, maxAttempts: 3, retryAt: "2026-11-25T10:15:00Z", error: "15분 뒤 다시 시도할 수 있어요." } }));
     const html = render();
     expect(html).toMatch(/datetime="2026-11-25T10:15:00Z"/i);
     expect(html).toContain("이후 재시도 가능 (한국 시간)");
     expect(html).toContain("1 / 3회 사용");
     expect(html).not.toContain("15분 뒤");
     expect(html).not.toContain("다시 시도하기");
+    expect(html).not.toContain("뉴스 다시 선정하기");
   });
 
-  test("exhausted attempts are distinct from a temporary cooldown", () => {
-    setPayload(payload({ canRequest: false, cartoon: { date, status: "failed", attempts: 3, maxAttempts: 3, retryAt: null } }));
+  test.each(["failed", "unavailable"])("exhausted %s attempts are distinct from a temporary cooldown", status => {
+    setPayload(payload({ canRequest: false, cartoon: { date, status, attempts: 3, maxAttempts: 3, retryAt: null } }));
     const html = render();
     expect(html).toContain("이날의 생성 시도를 모두 사용했어요");
     expect(html).toContain("3 / 3회 사용");
     expect(html).not.toContain("이후 재시도 가능");
     expect(html).not.toContain("다시 시도하기");
+    expect(html).not.toContain("뉴스 다시 선정하기");
   });
 });

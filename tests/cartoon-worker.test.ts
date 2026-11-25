@@ -93,11 +93,28 @@ describe("shared cartoon worker and fenced persistence", () => {
     expect(f.remove).not.toHaveBeenCalled();
   });
 
-  test("no verifiable news becomes unavailable without paying for image generation", async () => {
+  test("no verifiable news becomes unavailable with a 15-minute retry cooldown and no image charge", async () => {
     const f = fixture(); dependencies.selectCartoonNews.mockResolvedValue(null);
     expect(await processDailyCartoon(date)).toEqual({ processed: true, status: "unavailable" });
     expect(f.row.status).toBe("unavailable");
+    expect(f.row.retry_after).toBe(new Date(now.getTime() + 15 * 60_000).toISOString());
     expect(dependencies.illustrate).not.toHaveBeenCalled(); expect(f.upload).not.toHaveBeenCalled();
+  });
+
+  test("the last unavailable attempt has no further retry deadline", async () => {
+    const f = fixture(); f.row.attempts = 3;
+    dependencies.selectCartoonNews.mockResolvedValue(null);
+    expect(await processDailyCartoon(date)).toEqual({ processed: true, status: "unavailable" });
+    expect(f.row.retry_after).toBeNull();
+    expect(f.row.attempts).toBe(3);
+    expect(dependencies.illustrate).not.toHaveBeenCalled();
+  });
+
+  test("explicit reselection requests opt in at the atomic claim before a fresh search", async () => {
+    const f = fixture();
+    expect(await processDailyCartoon(date, true)).toEqual({ processed: true, status: "ready" });
+    expect(f.db.rpc).toHaveBeenCalledWith("claim_daily_cartoon", { p_date: date, p_retry_unavailable: true });
+    expect(dependencies.selectCartoonNews).toHaveBeenCalledWith(date);
   });
 
   test("resuming a saved prompt does not repeat news selection", async () => {

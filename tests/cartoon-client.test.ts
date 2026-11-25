@@ -115,6 +115,51 @@ describe("daily cartoon hook request lifecycle", () => {
     expect(screen.view.payload?.cartoon?.status).toBe("ready");
   });
 
+  test.each([today, yesterday])("an unavailable %s edition waits for explicit reselection through refresh and visibility changes", async date => {
+    const unavailable = snapshot("unavailable", { canRequest: true, cartoon: { date, status: "unavailable", attempts: 1, retryAt: null } });
+    fetchMock.mockImplementation(async (_url, options) => response(options?.method === "POST"
+      ? snapshot("processing", { cartoon: { date, status: "processing", attempts: 2 } }) : unavailable));
+    const screen = mount(date);
+    await settle();
+    await screen.session.refresh();
+    page.hidden = true; page.dispatchEvent(new Event("visibilitychange"));
+    page.hidden = false; page.dispatchEvent(new Event("visibilitychange"));
+    await settle();
+    expect(methods()).toEqual(["GET", "GET", "GET"]);
+    expect(screen.view.payload?.canRequest).toBe(true);
+    await screen.session.start();
+    expect(posts()).toHaveLength(1);
+    expect(JSON.parse(String(posts()[0][1]?.body))).toEqual({ date });
+    expect(screen.view.payload?.cartoon?.status).toBe("processing");
+  });
+
+  test.each([today, yesterday])("an unavailable %s cooldown refreshes permission without automatically searching again", async date => {
+    const retryAt = new Date(now.getTime() + 10000).toISOString();
+    fetchMock.mockResolvedValueOnce(response(snapshot("unavailable", { cartoon: { date, status: "unavailable", retryAt } })))
+      .mockResolvedValueOnce(response(snapshot("unavailable", { canRequest: true, cartoon: { date, status: "unavailable", retryAt } })))
+      .mockResolvedValueOnce(response(snapshot("processing", { cartoon: { date, status: "processing" } })));
+    const screen = mount(date, new Set([date]));
+    await settle();
+    await screen.session.start();
+    expect(methods()).toEqual(["GET"]);
+    await vi.advanceTimersByTimeAsync(11000);
+    expect(methods()).toEqual(["GET", "GET"]);
+    expect(screen.view.payload?.canRequest).toBe(true);
+    expect(screen.view.posting).toBe(false);
+    await screen.session.start();
+    expect(methods()).toEqual(["GET", "GET", "POST"]);
+  });
+
+  test("an unavailable edition with exhausted attempts makes no request beyond reading its state", async () => {
+    fetchMock.mockImplementation(async () => response(snapshot("unavailable", { cartoon: { date: today, status: "unavailable", attempts: 3, retryAt: null } })));
+    const screen = mount(today);
+    await settle();
+    await screen.session.start();
+    await vi.advanceTimersByTimeAsync(15 * 60000);
+    expect(methods()).toEqual(["GET"]);
+    expect(screen.view.payload?.canRequest).toBe(false);
+  });
+
   test("a lost POST response checks once and does not loop POST while canRequest remains true", async () => {
     fetchMock.mockResolvedValueOnce(response(snapshot(null, { canRequest: true })))
       .mockRejectedValueOnce(new TypeError("connection lost"))
@@ -205,8 +250,8 @@ describe("daily cartoon hook request lifecycle", () => {
     expect(methods()).toEqual(["GET", "GET", "POST"]);
   });
 
-  test("an accepted past retry keeps observing the old failed row until processing and ready appear", async () => {
-    const failed = snapshot("failed", { canRequest: true, cartoon: { date: yesterday, status: "failed", retryAt: now.toISOString() } });
+  test.each(["failed", "unavailable"])("an accepted past retry keeps observing the old %s row until processing and ready appear", async status => {
+    const failed = snapshot(status, { canRequest: true, cartoon: { date: yesterday, status, retryAt: now.toISOString() } });
     fetchMock.mockResolvedValueOnce(response(failed))
       .mockResolvedValueOnce(response(failed, 202))
       .mockResolvedValueOnce(response(failed))
@@ -228,8 +273,8 @@ describe("daily cartoon hook request lifecycle", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  test("an accepted retry with no visible start stops observing after thirty seconds without another POST", async () => {
-    const failed = snapshot("failed", { canRequest: true, cartoon: { date: yesterday, status: "failed", retryAt: now.toISOString() } });
+  test.each(["failed", "unavailable"])("an accepted %s retry with no visible start stops observing after thirty seconds without another POST", async status => {
+    const failed = snapshot(status, { canRequest: true, cartoon: { date: yesterday, status, retryAt: now.toISOString() } });
     fetchMock.mockImplementation(async (_url, options) => response(failed, options?.method === "POST" ? 202 : 200));
     const screen = mount(yesterday);
     await settle(); await screen.session.start();
@@ -238,7 +283,7 @@ describe("daily cartoon hook request lifecycle", () => {
     expect(posts()).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(screen.view.posting).toBe(false);
-    expect(screen.view.payload?.cartoon?.status).toBe("failed");
+    expect(screen.view.payload?.cartoon?.status).toBe(status);
     expect(vi.getTimerCount()).toBe(0);
     const callsAtDeadline = fetchMock.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60000);
@@ -246,12 +291,12 @@ describe("daily cartoon hook request lifecycle", () => {
     expect(posts()).toHaveLength(1);
   });
 
-  test("a fresh failure cooldown ends accepted-retry waiting without waiting for the deadline", async () => {
-    const failed = snapshot("failed", { canRequest: true, cartoon: { date: yesterday, status: "failed", retryAt: now.toISOString() } });
+  test.each(["failed", "unavailable"])("a fresh %s cooldown ends accepted-retry waiting without waiting for the deadline", async status => {
+    const failed = snapshot(status, { canRequest: true, cartoon: { date: yesterday, status, retryAt: now.toISOString() } });
     const retryAt = new Date(now.getTime() + 15 * 60000).toISOString();
     fetchMock.mockResolvedValueOnce(response(failed))
       .mockResolvedValueOnce(response(failed, 202))
-      .mockResolvedValueOnce(response(snapshot("failed", { cartoon: { date: yesterday, status: "failed", retryAt } })));
+      .mockResolvedValueOnce(response(snapshot(status, { cartoon: { date: yesterday, status, retryAt } })));
     const screen = mount(yesterday);
     await settle(); await screen.session.start();
     await vi.advanceTimersByTimeAsync(5000);

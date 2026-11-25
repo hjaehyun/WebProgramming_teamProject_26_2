@@ -73,8 +73,8 @@ describe("cartoon request eligibility", () => {
 
   test("respects retry deadlines, ten-minute leases, completed outcomes and the three-attempt cap", () => {
     expect(cartoonCanRequest({ status: "queued", attempts: 0 }, date, now)).toBe(true);
-    for (const status of ["queued", "processing", "failed"]) expect(cartoonCanRequest({ status, attempts: 3, claimed_at: "2026-11-25T09:00:00Z", retry_after: "2026-11-25T09:00:00Z" }, date, now)).toBe(false);
-    for (const status of ["ready", "unavailable"]) expect(cartoonCanRequest({ status, attempts: 1 }, date, now)).toBe(false);
+    for (const status of ["queued", "processing", "failed", "unavailable"]) expect(cartoonCanRequest({ status, attempts: 3, claimed_at: "2026-11-25T09:00:00Z", retry_after: "2026-11-25T09:00:00Z" }, date, now)).toBe(false);
+    expect(cartoonCanRequest({ status: "ready", attempts: 1 }, date, now)).toBe(false);
     expect(cartoonCanRequest({ status: "processing", attempts: 1, claimed_at: new Date(now.getTime() - 10 * 60_000).toISOString() }, date, now)).toBe(false);
     expect(cartoonCanRequest({ status: "processing", attempts: 1, claimed_at: new Date(now.getTime() - 10 * 60_000 - 1).toISOString() }, date, now)).toBe(true);
     expect(cartoonCanRequest({ status: "processing", attempts: 1, claimed_at: null }, date, now)).toBe(false);
@@ -83,6 +83,15 @@ describe("cartoon request eligibility", () => {
     expect(cartoonCanRequest({ status: "failed", attempts: 1, retry_after: null }, date, now)).toBe(false);
     vi.stubEnv("DAILY_CARTOON_ENABLED", "false"); expect(cartoonCanRequest(null, date, now)).toBe(false);
     vi.stubEnv("DAILY_CARTOON_ENABLED", "true"); mocks.aiConfigured.mockReturnValue(false); expect(cartoonCanRequest(null, date, now)).toBe(false);
+  });
+
+  test("news-unavailable editions allow legacy retries and respect future, due and invalid cooldowns", () => {
+    const row = { status: "unavailable", attempts: 1 };
+    expect(cartoonCanRequest({ ...row, retry_after: null }, date, now)).toBe(true);
+    expect(cartoonCanRequest({ ...row, retry_after: new Date(now.getTime() + 1).toISOString() }, date, now)).toBe(false);
+    expect(cartoonCanRequest({ ...row, retry_after: now.toISOString() }, date, now)).toBe(true);
+    expect(cartoonCanRequest({ ...row, retry_after: "invalid" }, date, now)).toBe(false);
+    expect(cartoonCanRequest({ ...row, attempts: 3, retry_after: null }, date, now)).toBe(false);
   });
 });
 
@@ -151,11 +160,30 @@ describe("cartoon API boundaries and background scheduling", () => {
     await background[0](); expect(mocks.worker).toHaveBeenCalledWith(date);
   });
 
-  test.each(["ready", "unavailable"])("POST preserves %s and schedules no regeneration", async status => {
+  test.each(["ready"])("POST preserves %s and schedules no regeneration", async status => {
     f.setRow({ cartoon_date: date, status, attempts: 1, sources: [] });
     const response = await post(); expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ canRequest: false, cartoon: { status } });
     expect(mocks.after).not.toHaveBeenCalled(); expect(mocks.worker).not.toHaveBeenCalled();
+  });
+
+  test.each([null, now.toISOString()])("explicit POST retries news selection after an eligible unavailable result (%s)", async retry_after => {
+    f.setRow({ cartoon_date: "2026-11-20", status: "unavailable", attempts: 1, retry_after, sources: [] });
+    const response = await post({ date: "2026-11-20" });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({ canRequest: true, cartoon: { status: "unavailable", attempts: 1 } });
+    expect(background).toHaveLength(1);
+    await background[0]();
+    expect(mocks.worker).toHaveBeenCalledWith("2026-11-20", true);
+  });
+
+  test("GET does not schedule eligible unavailable results and POST cannot skip the cooldown", async () => {
+    f.setRow({ cartoon_date: date, status: "unavailable", attempts: 1, retry_after: null });
+    expect(await (await get()).json()).toMatchObject({ canRequest: true });
+    expect(mocks.after).not.toHaveBeenCalled();
+    f.setRow({ cartoon_date: date, status: "unavailable", attempts: 1, retry_after: new Date(now.getTime() + 60_000).toISOString() });
+    expect((await post()).status).toBe(200);
+    expect(mocks.after).not.toHaveBeenCalled();
   });
 
   test("an active lease returns pending without starting another worker", async () => {

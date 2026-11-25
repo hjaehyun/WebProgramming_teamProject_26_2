@@ -15,10 +15,12 @@ let db: PGlite;
 let today: string;
 let past: string;
 const pastMigration = "supabase/migrations/20261125125132_past_daily_cartoons.sql";
+const retryMigration = "supabase/migrations/20261125165020_retry_unavailable_daily_cartoons.sql";
 const publicColumns = "cartoon_date,status,stage,headline,summary,selection_reason,caption,sources,selected_at,completed_at,retry_after,error_message,created_at";
 const enqueue = (day?: string) => day === undefined ? db.query<Job>("select * from public.enqueue_daily_cartoon()")
   : db.query<Job>("select * from public.enqueue_daily_cartoon($1::date)", [day]);
 const claim = (day = today) => db.query<Job>("select * from public.claim_daily_cartoon($1::date)", [day]);
+const manualClaim = (day = today, retryUnavailable: boolean | null = true) => db.query<Job>("select * from public.claim_daily_cartoon($1::date, $2::boolean)", [day, retryUnavailable]);
 const asWorker = () => db.exec("reset role; set role service_role");
 
 beforeAll(async () => {
@@ -37,6 +39,7 @@ beforeAll(async () => {
   `);
   await db.exec(await readFile("supabase/migrations/20261125103138_daily_editorial_cartoons.sql", "utf8"));
   await db.exec(await readFile(pastMigration, "utf8"));
+  await db.exec(await readFile(retryMigration, "utf8"));
   today = (await db.query<{ day: string }>("select ((now() at time zone 'Asia/Seoul')::date)::text as day")).rows[0].day;
   past = (await db.query<{ day: string }>("select ((now() at time zone 'Asia/Seoul')::date - 30)::text as day")).rows[0].day;
 }, 30000);
@@ -139,7 +142,7 @@ describe("daily editorial cartoon database", () => {
     expect((await db.query<Job>("select * from public.daily_cartoons")).rows[0].attempts).toBe(3);
   });
 
-  test.each(["ready", "unavailable"].flatMap(status => ["today", "past"].map(edition => ({ status, edition }))))("$edition $status is never reset or regenerated", async ({ status, edition }) => {
+  test.each(["ready", "unavailable"].flatMap(status => ["today", "past"].map(edition => ({ status, edition }))))("$edition $status is never reset by enqueue or automatically regenerated", async ({ status, edition }) => {
     const day = edition === "past" ? past : today;
     await enqueue(day); await claim(day);
     await db.query("update public.daily_cartoons set status=$1,headline='Existing result',sources='[{\"url\":\"https://example.test/news\"}]',image_path='existing.png',completed_at=now(),claimed_at=now()-interval '11 minutes',retry_after=now()-interval '1 minute'", [status]);
@@ -147,17 +150,67 @@ describe("daily editorial cartoon database", () => {
     const before = await snapshot();
     expect((await enqueue(day)).rows).toHaveLength(0);
     expect((await claim(day)).rows).toHaveLength(0);
+    expect((await manualClaim(day, false)).rows).toHaveLength(0);
+    expect((await manualClaim(day, null)).rows).toHaveLength(0);
+    if (status === "ready") expect((await manualClaim(day)).rows).toHaveLength(0);
     expect(await snapshot()).toEqual(before);
   });
 
-  test("the additive migration preserves completed editions and their timestamps", async () => {
+  test.each(["today", "past"])("%s legacy unavailable editions can be explicitly retried once without resetting the budget", async edition => {
+    const day = edition === "past" ? past : today;
+    await enqueue(day);
+    const first = (await claim(day)).rows[0];
+    await db.exec("update public.daily_cartoons set status='unavailable',retry_after=null,completed_at=now(),error_message='No reliable evidence'");
+    expect((await enqueue(day)).rows).toHaveLength(0);
+    expect((await claim(day)).rows).toHaveLength(0);
+    // PGlite serializes its connection: overlapping callers must still consume
+    // exactly one attempt. The production function retains FOR UPDATE SKIP LOCKED.
+    const responses = await Promise.all(Array.from({ length: 8 }, () => manualClaim(day)));
+    const winners = responses.flatMap(r => r.rows);
+    expect(winners).toHaveLength(1);
+    expect(winners[0]).toMatchObject({ status: "processing", stage: "searching", attempts: 2, retry_after: null, error_message: null, completed_at: null });
+    expect(winners[0].claim_token).not.toBe(first.claim_token);
+    expect((await db.query<Job>("select * from public.daily_cartoons")).rows[0].attempts).toBe(2);
+    expect((await db.query("update public.daily_cartoons set status='ready' where cartoon_date=$1::date and status='processing' and claim_token=$2 returning cartoon_date", [day, first.claim_token])).rows).toHaveLength(0);
+  });
+
+  test.each(["today", "past"])("%s unavailable editions respect cooldown and the three-attempt ceiling", async edition => {
+    const day = edition === "past" ? past : today;
+    await enqueue(day); await claim(day);
+    await db.exec("update public.daily_cartoons set status='unavailable',retry_after=now()+interval '15 minutes'");
+    expect((await manualClaim(day)).rows).toHaveLength(0);
+    expect((await db.query<Job>("select * from public.daily_cartoons")).rows[0].attempts).toBe(1);
+    await db.exec("update public.daily_cartoons set retry_after=now()-interval '1 second'");
+    expect((await claim(day)).rows).toHaveLength(0);
+    expect((await manualClaim(day)).rows[0]).toMatchObject({ status: "processing", stage: "searching", attempts: 2 });
+    await db.exec("update public.daily_cartoons set status='unavailable',retry_after=null");
+    expect((await manualClaim(day)).rows[0]).toMatchObject({ attempts: 3 });
+    for (const deadline of ["null", "now()-interval '1 second'"]) {
+      await db.exec(`update public.daily_cartoons set status='unavailable',retry_after=${deadline}`);
+      const before = (await db.query("select to_jsonb(c) as row from public.daily_cartoons c")).rows;
+      expect((await manualClaim(day)).rows).toHaveLength(0);
+      expect((await enqueue(day)).rows).toHaveLength(0);
+      expect((await db.query("select to_jsonb(c) as row from public.daily_cartoons c")).rows).toEqual(before);
+    }
+  });
+
+  test.each(["ready", "unavailable"])("the additive migrations preserve %s editions, attempts and timestamps", async status => {
     await enqueue(past); await claim(past);
-    await db.exec("update public.daily_cartoons set status='ready',headline='Saved edition',summary='Saved summary',image_path='existing.png',completed_at=now()");
+    await db.query("update public.daily_cartoons set status=$1,headline='Saved edition',summary='Saved summary',image_path='existing.png',completed_at=now(),attempts=2", [status]);
     const before = (await db.query("select to_jsonb(c) as row from public.daily_cartoons c")).rows;
     await db.exec("reset role");
     await db.exec(await readFile(pastMigration, "utf8"));
+    await db.exec(await readFile(retryMigration, "utf8"));
     await asWorker();
     expect((await db.query("select to_jsonb(c) as row from public.daily_cartoons c")).rows).toEqual(before);
+  });
+
+  test("RPC signatures keep legacy calls unambiguous without security-definer privileges", async () => {
+    const signatures = (await db.query("select p.pronargs,p.proargnames,p.pronargdefaults,p.prosecdef,p.proconfig from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='claim_daily_cartoon' order by p.pronargs")).rows;
+    expect(signatures).toEqual([
+      { pronargs: 1, proargnames: ["p_date"], pronargdefaults: 0, prosecdef: false, proconfig: ['search_path=""'] },
+      { pronargs: 2, proargnames: ["p_date", "p_retry_unavailable"], pronargdefaults: 0, prosecdef: false, proconfig: ['search_path=""'] },
+    ]);
   });
 
   test("the table rejects invalid status, stage, attempts, sources and oversized public text", async () => {
@@ -185,6 +238,7 @@ describe("daily editorial cartoon database", () => {
     await db.exec(`reset role; set role ${role}`);
     await expect(enqueue()).rejects.toThrow(/permission denied/);
     await expect(claim()).rejects.toThrow(/permission denied/);
+    await expect(manualClaim()).rejects.toThrow(/permission denied/);
     if (role === "anon") await expect(db.query(`select ${publicColumns} from public.daily_cartoons`)).rejects.toThrow(/permission denied/);
   });
 

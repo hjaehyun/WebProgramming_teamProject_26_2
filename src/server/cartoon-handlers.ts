@@ -27,7 +27,10 @@ export function cartoonsPost(request: Request) { return run(async () => {
   await enqueueCartoon(date);
   const payload = await cartoonPayload(adminClient(), date);
   if (payload.canRequest) after(async () => {
-    try { await processDailyCartoon(date); }
+    try {
+      if (payload.cartoon?.status === "unavailable") await processDailyCartoon(date, true);
+      else await processDailyCartoon(date);
+    }
     catch { console.warn("[cartoon] background task unavailable", { date }); }
   });
   return json(payload, payload.canRequest || ["queued", "processing"].includes(payload.cartoon?.status ?? "") ? 202 : 200);

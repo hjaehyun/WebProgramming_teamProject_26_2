@@ -157,12 +157,12 @@ function CartoonStatus({ cartoon, loading, posting, enabled, beforeAvailable, is
   const working = posting || pending(cartoon);
   const drawing = cartoon?.stage === "drawing";
   const exhausted = Number.isFinite(cartoon?.attempts) && cartoon.attempts >= (cartoon.maxAttempts ?? 3);
-  const retryAt = !working && !exhausted && cartoon?.status === "failed" && !canRequest ? timestamp(cartoon.retryAt) : null;
+  const retryAt = !working && !exhausted && ["failed", "unavailable"].includes(cartoon?.status) && !canRequest ? timestamp(cartoon.retryAt) : null;
   let title = "이날은 발행된 만평이 없어요", detail = "다른 날짜의 지면도 펼쳐보세요.";
   if (loading) { title = "지면을 펼치고 있어요"; detail = "잠시만 기다려 주세요."; }
   else if (working) { title = drawing ? "만평 한 장을 그리고 있어요" : "대표 뉴스를 살펴보고 있어요"; detail = "완성되면 이 자리에 보여드릴게요."; }
   else if (cartoon?.status === "failed") { title = exhausted ? "이날의 생성 시도를 모두 사용했어요" : `${isToday ? "오늘" : "이날"}의 만평을 완성하지 못했어요`; detail = exhausted ? "이 날짜는 더 요청할 수 없어요. 다른 날짜의 만평을 펼쳐보세요." : canRequest ? "다시 시도할 수 있어요." : retryAt ? "잠시 뒤 다시 시도할 수 있어요." : cartoon.error || "잠시 후 다시 확인해 주세요."; }
-  else if (cartoon?.status === "unavailable") { title = "선정할 뉴스를 확인하지 못했어요"; detail = cartoon.error || "확인할 수 있는 보도가 모이면 다시 준비할 수 있어요."; }
+  else if (cartoon?.status === "unavailable") { title = exhausted ? "이날의 생성 시도를 모두 사용했어요" : "선정할 뉴스를 확인하지 못했어요"; detail = exhausted ? "뉴스를 다시 찾아봤지만 충분한 근거를 확인하지 못했어요. 다른 날짜의 만평을 펼쳐보세요." : canRequest ? "뉴스를 다시 검색해 대표 뉴스를 선정할 수 있어요." : retryAt ? "잠시 뒤 뉴스를 다시 선정할 수 있어요." : cartoon.error || "확인할 수 있는 보도를 찾지 못했어요. 다시 불러와 재선정 가능 여부를 확인해 주세요."; }
   else if (!enabled) { title = "하루만평을 준비하고 있어요"; detail = "새로운 지면이 열리면 이곳에서 만나요."; }
   else if (isToday && beforeAvailable) { title = "저녁 7시 이후에 만나요"; detail = "하루의 보도가 모이면 오늘의 대표 뉴스와 만평을 준비해요."; }
   else if (isToday) { title = "오늘의 지면을 준비해요"; detail = "대표 뉴스 한 가지를 골라 모두가 함께 볼 만평을 만들어요."; }
@@ -172,6 +172,6 @@ function CartoonStatus({ cartoon, loading, posting, enabled, beforeAvailable, is
     {retryAt && <p className={s.retryTime}><time dateTime={cartoon.retryAt}>{retryAt}</time> 이후 재시도 가능 (한국 시간)</p>}
     {Number.isFinite(cartoon?.attempts) && <small className={s.attempts}>{cartoon.attempts} / {cartoon.maxAttempts ?? 3}회 사용</small>}
     {working && <div className={s.progress}><span className={!drawing ? s.currentStep : ""}>뉴스 선정</span><i aria-hidden="true" /><span className={drawing ? s.currentStep : ""}>만평 그리기</span></div>}
-    {!posting && !loading && !exhausted && canRequest && <button onClick={onRequest}>{cartoon ? "다시 시도하기" : isToday ? "오늘의 만평 준비하기" : "이날의 만평 준비하기"}</button>}
+    {!posting && !loading && !exhausted && canRequest && <button onClick={onRequest}>{cartoon?.status === "unavailable" ? "뉴스 다시 선정하기" : cartoon ? "다시 시도하기" : isToday ? "오늘의 만평 준비하기" : "이날의 만평 준비하기"}</button>}
   </div>;
 }

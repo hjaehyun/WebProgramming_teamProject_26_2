@@ -22,9 +22,10 @@ export function cartoonCanRequest(row: Row | null, date: string, now = new Date(
   if (!cartoonsEnabled() || !dateSchema.safeParse(date).success || !Number.isFinite(now.getTime())
     || date < "0001-01-01" || date > seoulDate(now) || now.getTime() < Date.parse(cartoonAvailableAt(date))) return false;
   if (!row) return true;
-  if (row.attempts >= 3 || ["ready", "unavailable"].includes(row.status)) return false;
+  if (row.attempts >= 3 || row.status === "ready") return false;
   if (row.status === "processing") return Boolean(row.claimed_at && Date.parse(row.claimed_at) < now.getTime() - LEASE_MS);
   if (row.status === "failed") return Boolean(row.retry_after && Date.parse(row.retry_after) <= now.getTime());
+  if (row.status === "unavailable") return row.retry_after == null || Date.parse(row.retry_after) <= now.getTime();
   return row.status === "queued";
 }
 
@@ -64,10 +65,10 @@ export async function enqueueCartoon(date: string) {
 }
 
 /** A DB lease, not a process-local flag, bounds concurrent requests and provider charges. */
-export async function processDailyCartoon(date = seoulDate()) {
+export async function processDailyCartoon(date = seoulDate(), retryUnavailable = false) {
   if (!cartoonsEnabled()) return { processed: false, status: "disabled" };
   const db = adminClient();
-  const claimed = await db.rpc("claim_daily_cartoon", { p_date: date });
+  const claimed = await db.rpc("claim_daily_cartoon", retryUnavailable ? { p_date: date, p_retry_unavailable: true } : { p_date: date });
   if (claimed.error) throw claimed.error;
   const job: Row | undefined = claimed.data?.[0];
   if (!job) return { processed: false };
@@ -83,7 +84,8 @@ export async function processDailyCartoon(date = seoulDate()) {
       const news = await selectCartoonNews(job.cartoon_date);
       if (!news) {
         const unavailable = await update({ status: "unavailable", completed_at: new Date().toISOString(),
-          error_message: "선택한 날짜와 출처를 충분히 확인할 수 있는 대표 뉴스를 찾지 못했어요." });
+          retry_after: job.attempts < 3 ? new Date(Date.now() + RETRY_MS).toISOString() : null,
+          error_message: "이번 검색에서는 선택한 날짜의 기사와 출처를 충분히 확인하지 못했어요." });
         if (unavailable.error) throw unavailable.error;
         return { processed: true, status: unavailable.data ? "unavailable" : "superseded" };
       }

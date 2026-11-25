@@ -45,9 +45,9 @@ export function createEditionSession({ requestedDate, autoRequested, onChange })
       // Every POST carries the displayed date, including across midnight. Never show another day's result.
       if (requestDate && data.cartoon && data.cartoon.date !== requestDate) throw new Error("선택한 날짜의 만평을 확인하지 못했어요. 다시 불러와 주세요.");
       current = data;
-      // after() can start the retry only after POST returns the old failed row.
+      // after() can start the retry only after POST returns the old retryable row.
       // Briefly observe that accepted request without issuing another paid start.
-      const waitingForClaim = data.canRequest && !pending(data.cartoon) && !["ready", "unavailable"].includes(data.cartoon?.status);
+      const waitingForClaim = data.canRequest && !pending(data.cartoon) && data.cartoon?.status !== "ready";
       if (method === "POST" && waitingForClaim) awaitingStartUntil = Date.now() + 30000;
       else if (!waitingForClaim || Date.now() >= awaitingStartUntil) awaitingStartUntil = 0;
       onChange({ payload: data, error: null, loading: false, posting: awaitingStartUntil > Date.now(), fetchedAt: Date.now() });
@@ -55,7 +55,9 @@ export function createEditionSession({ requestedDate, autoRequested, onChange })
       // allow recovery; a failed POST followed by canRequest=true remains latched.
       const day = requestedDate ?? data.today;
       if (method === "GET" && !data.canRequest) autoRequested.delete(day);
-      if (method === "GET" && data.cartoon?.status !== "ready" && data.enabled && data.canRequest &&
+      // An unavailable edition always needs an explicit request to search again,
+      // including when today's cooldown expires or the page becomes visible.
+      if (method === "GET" && !["ready", "unavailable"].includes(data.cartoon?.status) && data.enabled && data.canRequest &&
           validCartoonDate(day) && day <= data.today && (day === data.today || pending(data.cartoon)) &&
           !document.hidden && !autoRequested.has(day)) {
         autoRequested.add(day);
