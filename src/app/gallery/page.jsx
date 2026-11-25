@@ -112,6 +112,12 @@ function Gallery() {
           <IconNext />
         </Link>
 
+        <Link href="/cartoon" className={s.cartoon}>
+          <span className={s.cartoonIcon} aria-hidden="true">日</span>
+          <span><small>하루만평 · 하루 한 장</small><strong>나의 하루, 세상의 하루</strong><span>같은 날짜의 두 그림을 펼쳐보세요.</span></span>
+          <IconNext />
+        </Link>
+
         <section className={s.recent}>
           <h2>최근 그림</h2>
           <div className={s.recentGrid}>

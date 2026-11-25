@@ -13,7 +13,7 @@ export default function PrivacyPage() {
     <div className="app">
       <TopBar title="개인정보처리방침" back="/" />
       <main className={`scroll ${s.main}`}>
-        <p className={s.meta}>시행일 2026년 11월 15일</p>
+        <p className={s.meta}>시행일 2026년 11월 25일</p>
         <p>
           하루조각은 웹프로그래밍 수업 팀 프로젝트로 만든 그림일기 서비스예요. 서비스에 필요한 정보만 받고, 탈퇴하면 모두
           지워요.
@@ -74,6 +74,7 @@ export default function PrivacyPage() {
               <th>OpenAI</th>
               <td>
                 동의한 경우 조각글·작성 시각을 장면 정리에, 장면 설명을 그림 생성에, 저장된 장면 요약·태그·날짜를 큐레이터 해설에 보내요. 계정 이메일·닉네임을 별도 항목으로 보내지 않지만, 글에 직접 적은 개인 정보는 포함될 수 있어요.
+                하루만평은 공개 뉴스를 검색·요약하고 만평을 만드는 데 OpenAI를 사용해요. 이 과정에는 내 조각글·그림·계정 정보를 보내지 않아요. 내 그림과의 비교는 화면에서 같은 날짜의 두 그림을 나란히 보여주는 방식이에요.
               </td>
             </tr>
             <tr>

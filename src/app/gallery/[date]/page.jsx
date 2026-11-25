@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import Framed from "@/components/Framed";
@@ -213,6 +214,10 @@ function Detail() {
             </div>
           )}
         </section>
+
+        <Link href={`/cartoon?date=${encodeURIComponent(date)}`} className={s.cartoonLink}>
+          <span><small>같은 날, 다른 시선</small><strong>이날의 만평과 나란히 보기</strong></span><IconNext />
+        </Link>
 
         <SongCard
           available={!!db.capabilities?.music}

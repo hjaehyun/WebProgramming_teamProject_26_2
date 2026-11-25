@@ -33,3 +33,11 @@
 .recent h2 { margin: 0; padding: 0 8px; font-size: 15px; font-weight: 700; }
 .recentGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .recentItem { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: var(--ink); font-size: 18px; }
+
+.cartoon { display: flex; align-items: center; gap: 12px; padding: 16px 14px; border: 1px solid #D7D0C0; border-top: 3px double #746C5A; border-radius: 3px; background: #F5F0E4; color: #413B2F; text-decoration: none; }
+.cartoonIcon { display: flex; align-items: center; justify-content: center; width: 36px; height: 42px; flex-shrink: 0; border: 1px solid #BCB09A; color: #994B37; font-size: 24px; font-family: serif; }
+.cartoon > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cartoon small { font-size: 10px; color: #994B37; }
+.cartoon strong { font-size: 14px; }
+.cartoon > span:nth-child(2) > span { color: #7C705D; font-size: 11px; line-height: 1.5; }
+.cartoon > svg { flex-shrink: 0; }

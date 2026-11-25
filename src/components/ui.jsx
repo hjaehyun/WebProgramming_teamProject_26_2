@@ -77,6 +77,16 @@ const TABS = [
       </>
     ),
   },
+  {
+    href: "/cartoon",
+    label: "하루만평",
+    icon: (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M7 8h4v4H7zM14 8h3M14 12h3M7 16h10" />
+      </>
+    ),
+  },
 ];
 
 export function BottomNav() {

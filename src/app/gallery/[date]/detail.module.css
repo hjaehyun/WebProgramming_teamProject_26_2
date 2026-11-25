@@ -43,3 +43,9 @@
 .send:disabled { background: var(--line-2); cursor: default; }
 .actions { display: flex; gap: 8px; }
 .download { width: 52px; height: 52px; flex-shrink: 0; border: 1px solid var(--line-2); border-radius: 26px; background: var(--surface); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+.cartoonLink { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 16px; border: 1px solid #D7D0C0; border-top: 3px double #746C5A; border-radius: 3px; background: #F5F0E4; color: #413B2F; text-decoration: none; }
+.cartoonLink > span { display: flex; flex-direction: column; gap: 5px; }
+.cartoonLink small { font-size: 10px; color: #994B37; }
+.cartoonLink strong { font-size: 13px; }
+.cartoonLink > svg { flex-shrink: 0; }

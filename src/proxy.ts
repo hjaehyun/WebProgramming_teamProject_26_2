@@ -17,4 +17,4 @@ export async function proxy(request:NextRequest) {
   response.headers.set("Cache-Control","private, no-store");
   return response;
 }
-export const config={matcher:["/((?!_next/static|_next/image|favicon.ico|api/jobs|api/cron|.*\\.(?:svg|png|webp|jpg|woff2?)$).*)"]};
+export const config={matcher:["/((?!_next/static|_next/image|favicon.ico|api/jobs|api/cartoon-jobs|api/cron|.*\\.(?:svg|png|webp|jpg|woff2?)$).*)"]};
