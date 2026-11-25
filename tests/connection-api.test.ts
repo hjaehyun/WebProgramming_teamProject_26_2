@@ -85,7 +85,7 @@ describe("private connection API", () => {
     expect((await post(undefined, "https://foreign.test")).status).toBe(403);
     expect(mocks.authenticated).not.toHaveBeenCalled(); expect(f.rpc).not.toHaveBeenCalled();
   });
-  test.each(["2026-02-30", "invalid", "2026-11-26"])("invalid or future date %s is rejected", async day => {
+  test.each(["2026-02-30", "invalid", "2026-11-26", "0000-01-01"])("invalid or future date %s is rejected", async day => {
     expect((await get(day)).status).toBe(400);
     expect((await post({ date: day, refresh: false, requestId })).status).toBe(400);
     expect(f.rpc).not.toHaveBeenCalled(); expect(background).toEqual([]);
@@ -124,6 +124,34 @@ describe("private connection API", () => {
     expect(background).toEqual([]);
     const text = JSON.stringify(payload);
     for (const secretText of ["private diary marker", "private summary", "private tag", "private provider prompt", token, "input_fingerprint"]) expect(text).not.toContain(secretText);
+  });
+  test.each(["ready", "no_match"])("a saved legacy %s result is marked without changing its data or starting work", async status => {
+    const legacy = { news_from: "2026-11-18T15:00:00Z", news_to: now.toISOString(), selected_at: now.toISOString() };
+    const row = f.ready({ status, ...legacy });
+    const before = JSON.stringify(row);
+    const payload = await (await get()).json();
+    expect(payload).toMatchObject({ newsFrom: "2026-10-15T15:00:00.000Z", newsTo: "2026-11-16T14:59:59.999Z",
+      canRefresh: true, connection: { status, rangeChanged: true, newsFrom: legacy.news_from, newsTo: legacy.news_to, attempts: 1 } });
+    expect(JSON.stringify(row)).toBe(before);
+    expect(background).toEqual([]); expect(f.rpc).not.toHaveBeenCalled();
+  });
+  test("a monthly saved result is compatible and reuses its image", async () => {
+    f.ready({ selected_at: now.toISOString(), news_from: "2026-10-16T00:00:00+09:00", news_to: "2026-11-16T23:59:59.999+09:00" });
+    const payload = await (await get()).json();
+    expect(payload.connection).toMatchObject({ status: "ready", rangeChanged: false, attempts: 1 });
+    expect(f.sign).toHaveBeenCalledTimes(1); expect(background).toEqual([]);
+  });
+  test("a same-day result stays compatible after its original search clock advances", async () => {
+    f.ready({ entry_date: today, selected_at: "2026-11-25T10:00:00Z", news_from: "2026-10-24T15:00:00Z", news_to: "2026-11-25T10:00:00Z" });
+    const payload = await (await get(today)).json();
+    expect(payload.connection).toMatchObject({ rangeChanged: false, newsTo: "2026-11-25T10:00:00Z" });
+    expect(payload.newsTo).toBe(now.toISOString()); expect(background).toEqual([]);
+  });
+  test("a pending search exposes its expected monthly range instead of DB placeholder dates", async () => {
+    f.ready({ status: "queued", stage: "topics", selected_at: null, news_from: "2026-11-18T15:00:00Z", news_to: now.toISOString() });
+    const payload = await (await get()).json();
+    expect(payload.connection).toMatchObject({ rangeChanged: false, newsFrom: payload.newsFrom, newsTo: payload.newsTo });
+    expect(payload.newsFrom).toBe("2026-10-15T15:00:00.000Z");
   });
   test("all admin lookups and history are scoped to the authenticated account", async () => {
     f.ready(); f.rows.push({ id: "foreign", user_id: "another-user", entry_date: "2026-01-01", status: "ready" });

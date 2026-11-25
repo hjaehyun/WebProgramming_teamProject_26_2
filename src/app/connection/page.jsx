@@ -14,11 +14,16 @@ import s from "./connection.module.css";
 const working = item => item && ["queued", "processing"].includes(item.status);
 const dateLabel = day => `${Number(day.slice(0, 4))}년 ${longDate(day)}`;
 function timestamp(value, withTime = true) {
+  if (typeof value !== "string" || !value.trim()) return null;
   const date = new Date(value);
-  return value && Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("ko-KR", {
+  return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric",
     ...(withTime ? { hour: "numeric", minute: "2-digit" } : {}),
   }).format(date) : null;
+}
+function dateRange(from, to) {
+  const start = timestamp(from, false), end = timestamp(to, false);
+  return start && end ? `${start} – ${end}` : null;
 }
 function sourceUrl(value) {
   try { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) ? url.href : null; }
@@ -60,15 +65,16 @@ function Connection({ date, today }) {
   const allowed = !!(payload?.enabled && consent && hasEntries && (regenerate ? payload.canRefresh : payload?.canRequest));
   const diaryHref = `/gallery/${date}`;
   const selectedAt = timestamp(result?.selectedAt);
-  const range = result?.newsFrom && result?.newsTo ? `${timestamp(result.newsFrom, false)} – ${timestamp(result.newsTo, false)}` : null;
-  const requestLabel = regenerate ? "최신 뉴스 다시 연결하기" : result ? "다시 연결하기" : "이날의 뉴스 연결하기";
+  const range = dateRange(result?.newsFrom, result?.newsTo);
+  const requestedRange = dateRange(payload?.newsFrom, payload?.newsTo);
+  const requestLabel = regenerate ? "뉴스 다시 연결하기" : result ? "다시 연결하기" : "이날의 뉴스 연결하기";
 
   return <>
     <main className={`scroll ${s.paper}`}>
       <header className={s.header}>
         <div className={s.overline}><span>HARU CONNECTION</span><span>나만의 작은 연결</span></div>
         <div className={s.titleRow}><h1>하루연결<span aria-hidden="true">↗</span></h1><ProfileButton /></div>
-        <p className={s.intro}>나의 작은 하루에서,<br />지금 세상의 이야기로.</p>
+        <p className={s.intro}>나의 작은 하루에서,<br />그 무렵 세상의 이야기로.</p>
         <nav className={s.sections} aria-label="뉴스 그림 메뉴">
           <Link href={`/cartoon?date=${date}`}>하루만평 <span>함께 보는 뉴스</span></Link>
           <Link href={`/connection?date=${date}`} aria-current="page">하루연결 <span>내 기록과 닿은 뉴스</span></Link>
@@ -80,12 +86,14 @@ function Connection({ date, today }) {
         <select id="connection-date" value={date} onChange={event => router.replace(`/connection?date=${event.target.value}`, { scroll: false })}>
           {dates.map(day => <option key={day} value={day}>{dateLabel(day)}{day === today ? " · 오늘" : ""}</option>)}
         </select>
-        <p>일기 날짜와 관계없이, 검색 시점의 <strong>최근 7일 보도</strong>에서 찾아요.</p>
+        <p><strong>일기 날짜 기준 이전 한 달(당일 포함)</strong>의 보도에서 찾아요.</p>
+        {requestedRange && <p>새로 연결할 뉴스 범위 · {requestedRange} (한국 시간)</p>}
       </section>
 
       {error && <div className={s.notice} role="alert"><p>{error}</p><button type="button" onClick={refresh} disabled={posting}>다시 불러오기</button></div>}
 
       {result?.sourceChanged && <div className={s.changed} role="status"><strong>연결한 뒤 기록이 바뀌었어요</strong><p>아래 뉴스는 이전 조각글·장면을 바탕으로 찾았어요. 현재 기록을 반영하려면 다시 연결해 주세요.</p></div>}
+      {result?.rangeChanged && <div className={s.changed} role="status"><strong>저장된 뉴스의 검색 범위가 달라요</strong><p>아래 결과는 이전 검색 범위로 저장됐어요. 일기 날짜 기준 이전 한 달(당일 포함)로 찾으려면 다시 연결해 주세요.</p></div>}
 
       <section className={s.requestCard} aria-label="뉴스 연결 요청">
         <div className={s.requestHeading}><span className={s.smallLabel}>일기에서 주제로, 주제에서 뉴스로</span><span className={s.private}>나만 보기</span></div>
@@ -93,7 +101,7 @@ function Connection({ date, today }) {
           <h2>한 조각이면 시작할 수 있어요</h2><p>이날 기억나는 순간을 먼저 남겨 주세요. 개인 그림이 없어도 글만으로 뉴스를 연결할 수 있어요.</p>
           <Link href={diaryHref} className={s.primary}>이날 기록하기 <IconNext /></Link>
         </> : <>
-          <h2>{busy ? "하루와 뉴스 사이를 잇고 있어요" : regenerate ? "이날의 기록, 지금의 뉴스" : "어떤 이야기가 이어질까요?"}</h2>
+          <h2>{busy ? "하루와 뉴스 사이를 잇고 있어요" : regenerate ? "이날의 기록과 이어진 뉴스" : "어떤 이야기가 이어질까요?"}</h2>
           <p className={s.privacy}>버튼을 누르면 이날의 <strong>일기 원문과 그림에 저장된 장면 요약·태그를 OpenAI로 보내</strong> 관련 주제를 찾아요.</p>
           <details className={s.details}><summary>어떤 정보가 전송되나요?</summary><p>뉴스 웹검색에는 미리 정한 일반 주제만 사용해요. 일기 원문·그림 파일·계정 정보는 웹검색에 보내지 않아요. 그림 파일 자체를 AI로 분석하지 않으며, 기존 내 그림은 그대로 유지돼요. 연결 결과는 나만 볼 수 있고 공개 전시에 포함되지 않아요. <Link href="/privacy">개인정보처리방침</Link></p></details>
           {busy ? <Progress stage={result?.stage} /> : <>
@@ -104,12 +112,12 @@ function Connection({ date, today }) {
             {payload?.retryAt && <p className={s.blocked}><time dateTime={payload.retryAt}>{timestamp(payload.retryAt)}</time> 이후 재시도할 수 있어요. (한국 시간)</p>}
           </>}
           <p className={s.limit}>{result ? `이날 ${result.attempts ?? 0} / ${result.maxAttempts ?? 3}회 사용 · ` : ""}일기 날짜마다 실패를 포함해 최대 3회 연결해요.</p>
-          {regenerate && <p className={s.cacheNote}>저장된 결과예요. 새 뉴스는 다시 연결할 때 찾아요.</p>}
+          {regenerate && <p className={s.cacheNote}>저장된 결과예요. 다시 연결하면 일기 날짜 기준의 범위에서 새로 찾아요.</p>}
         </>}
       </section>
 
       {(result || entries.length > 0 || personal) && <>
-        <div className={s.sectionHeading}><h2>두 장면의 연결</h2><span>내 기록 × 최근 뉴스</span></div>
+        <div className={s.sectionHeading}><h2>두 장면의 연결</h2><span>내 기록 × 연결된 뉴스</span></div>
         <div className={s.viewModes} role="group" aria-label="그림 보기 방식">
           {[["both", "나란히"], ["personal", "내 하루 크게"], ["news", "뉴스 그림 크게"]].map(([value, label]) => <button key={value} type="button" aria-pressed={mode === value} onClick={() => setMode(value)}>{label}</button>)}
         </div>
@@ -129,7 +137,7 @@ function Connection({ date, today }) {
           {mode !== "personal" && <figure className={s.panel}>
             <div className={s.panelHeading}><span className={s.panelNumber}>02</span><h3>연결된 뉴스</h3><span className={s.aiTag}>AI 그림</span></div>
             {result?.status === "ready" ? <ConnectionImage key={result.imageUrl} url={result.imageUrl} imageError={result.imageError} alt={result.caption || result.headline || "일기 주제와 연결된 뉴스의 AI 그림"} onReload={refresh} /> : <ConnectionStatus result={result} loading={loading} posting={posting} />}
-            <figcaption>{result?.headline || "일기 주제와 닿아 있는 이야기"}<span>검색 시점의 최근 7일 뉴스</span></figcaption>
+            <figcaption>{result?.headline || "일기 주제와 닿아 있는 이야기"}<span>{range ? `보도 범위 · ${range}` : "일기 주제에 연결된 뉴스"}</span></figcaption>
           </figure>}
         </div>
       </>}
@@ -147,7 +155,7 @@ function Connection({ date, today }) {
       {(range || selectedAt) && <div className={s.searchMeta}>
         {selectedAt && <p>뉴스 검색 · <time dateTime={result.selectedAt}>{selectedAt}</time> (한국 시간)</p>}
         {range && <p>보도 검색 범위 · {range}</p>}
-        <span>일기를 쓴 날의 뉴스가 아니라, 검색할 때의 최근 보도예요.</span>
+        <span>표시된 결과를 찾을 때 사용한 보도 범위예요.</span>
       </div>}
 
       {sources.length > 0 && <section className={s.sources} aria-labelledby="connection-sources">
@@ -174,7 +182,7 @@ function ConnectionStatus({ result, loading, posting }) {
   let title = "이곳에 뉴스 그림이 놓여요", detail = "위에서 연결을 시작해 주세요.";
   if (loading) { title = "연결을 불러오고 있어요"; detail = "잠시만 기다려 주세요."; }
   else if (posting || working(result)) { title = result?.stage === "drawing" ? "뉴스 그림을 그리고 있어요" : "이어지는 이야기를 찾고 있어요"; detail = "내 하루에서 출발한 뉴스를 준비해요."; }
-  else if (result?.status === "no_match") { title = "잘 맞는 뉴스를 찾지 못했어요"; detail = "최근 7일 보도에서 충분히 관련 있는 기사를 확인하지 못했어요."; }
+  else if (result?.status === "no_match") { title = "잘 맞는 뉴스를 찾지 못했어요"; detail = "검색 범위 안에서 충분히 관련 있는 기사를 확인하지 못했어요."; }
   else if (result?.status === "failed") { title = "연결을 완성하지 못했어요"; detail = result.error || "잠시 후 다시 시도해 주세요."; }
   else if (result?.status === "cancelled") { title = "이 연결은 중단됐어요"; detail = result.error || "기록과 AI 전송 동의를 확인해 주세요."; }
   return <div className={s.emptyPicture} role="status"><span aria-hidden="true">↗</span><strong>{title}</strong><p>{detail}</p></div>;

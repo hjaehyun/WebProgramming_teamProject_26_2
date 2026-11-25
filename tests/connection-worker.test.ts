@@ -14,7 +14,7 @@ import { CONNECTION_BUCKET, processConnection } from "../src/server/connections"
 
 const date = "2020-01-02";
 const now = new Date("2026-11-25T12:00:00Z");
-const window = { newsFrom: "2026-11-18T15:00:00.000Z", newsTo: now.toISOString() };
+const window = { newsFrom: "2019-12-01T15:00:00.000Z", newsTo: "2020-01-02T14:59:59.999Z" };
 const userId = "alice";
 const id = "connection-id";
 const token = "aaa111";
@@ -23,7 +23,7 @@ const previousPath = `${userId}/connection-${id}/ccc333.png`;
 const newerPath = `${userId}/connection-${id}/bbb222.png`;
 const news = { headline: "공개 뉴스 제목", summary: "확인한 공개 뉴스의 요약", connectionReason: "대중교통 주제와 연결된다.",
   caption: "뉴스를 설명하는 삽화", imagePrompt: "A symbolic explanatory illustration", topics: ["transport"], selectedAt: now.toISOString(),
-  ...window, sources: [{ title: "출처 기사", url: "https://example.test/news", publishedAt: now.toISOString() }] };
+  ...window, sources: [{ title: "출처 기사", url: "https://example.test/news", publishedAt: "2020-01-02T10:00:00Z" }] };
 type Row = Record<string, unknown> & { id: string; user_id: string; status: string; stage: string; claim_token: string | null;
   claimed_at: string | null; image_path: string | null; image_prompt: string | null; attempts: number };
 type Profile = { id: string; ai_consent_at: string | null; deleting_at: string | null };
@@ -47,6 +47,7 @@ function fixture(options: Options = {}) {
   const row: Row = { id, user_id: userId, entry_date: date, status: "processing", stage: options.drawing ? "drawing" : "topics",
     claim_token: token, claimed_at: now.toISOString(), image_path: options.previousImage ? previousPath : null,
     image_prompt: options.drawing ? "Saved illustration prompt" : null, attempts: 1, topics: [], sources: [],
+    selected_at: options.drawing ? now.toISOString() : null, news_from: window.newsFrom, news_to: window.newsTo,
     entry_snapshot: [{ content: "비공개 일기 원문", created_at: `${date}T10:00:00+09:00` }],
     artwork_summary: "비공개 그림 요약", artwork_tags: ["비공개 태그"] };
   const profile: Profile = { id: userId, ai_consent_at: now.toISOString(), deleting_at: null };
@@ -120,13 +121,14 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("connection research and image phases", () => {
-  test("research checkpoints current news for an old diary and clears private input without calling images", async () => {
+  test("research uses the old diary date and clears private input without calling images", async () => {
     const f = fixture();
     const privateSnapshot = f.row.entry_snapshot;
     expect(await processConnection(id)).toEqual({ processed: true, status: "queued" });
     expect(f.db.rpc).toHaveBeenCalledWith("claim_daily_connection", { p_id: id });
     expect(dependencies.extractConnectionTopics).toHaveBeenCalledWith({ entries: privateSnapshot, artworkSummary: "비공개 그림 요약", artworkTags: ["비공개 태그"] });
-    expect(dependencies.selectConnectionNews).toHaveBeenCalledWith(["transport"], now);
+    expect(dependencies.selectConnectionNews).toHaveBeenCalledWith(["transport"], date, now);
+    expect(dependencies.connectionNewsWindow).toHaveBeenCalledWith(date, now);
     expect(f.row).toMatchObject({ status: "queued", stage: "drawing", topics: ["transport"], headline: news.headline, sources: news.sources,
       image_prompt: news.imagePrompt, news_from: window.newsFrom, news_to: window.newsTo,
       claim_token: null, claimed_at: null, entry_snapshot: [], artwork_summary: null, artwork_tags: [] });
@@ -153,7 +155,7 @@ describe("connection research and image phases", () => {
     const f = fixture();
     dependencies.extractConnectionTopics.mockResolvedValue({ topics: ["transport", "coding"] });
     await processConnection(id);
-    expect(dependencies.selectConnectionNews).toHaveBeenCalledWith(["transport", "coding"], now);
+    expect(dependencies.selectConnectionNews).toHaveBeenCalledWith(["transport", "coding"], date, now);
     expect(f.row.topics).toEqual(["transport"]);
   });
 
@@ -166,6 +168,36 @@ describe("connection research and image phases", () => {
     expect(f.objects.has(path)).toBe(true);
   });
 
+  test("an old-policy drawing checkpoint researches its saved public topic without private extraction", async () => {
+    const f = fixture({ drawing: true });
+    Object.assign(f.row, { news_from: "2026-11-18T15:00:00Z", news_to: now.toISOString(), topics: ["transport", "untrusted-private-value"],
+      entry_snapshot: [], artwork_summary: null, artwork_tags: [] });
+    expect(await processConnection(id)).toEqual({ processed: true, status: "queued" });
+    expect(dependencies.extractConnectionTopics).not.toHaveBeenCalled();
+    expect(dependencies.selectConnectionNews).toHaveBeenCalledWith(["transport"], date, now);
+    expect(dependencies.illustrate).not.toHaveBeenCalled();
+    expect(f.row).toMatchObject({ stage: "drawing", news_from: window.newsFrom, news_to: window.newsTo, image_prompt: news.imagePrompt, attempts: 1 });
+  });
+
+  test.each([null, "invalid", "2026-11-26T12:00:00Z"])("a checkpoint with invalid selection time %s cannot use its saved image prompt", async selected_at => {
+    const f = fixture({ drawing: true });
+    Object.assign(f.row, { selected_at, topics: ["transport"] });
+    expect(await processConnection(id)).toEqual({ processed: true, status: "queued" });
+    expect(dependencies.illustrate).not.toHaveBeenCalled();
+    expect(dependencies.extractConnectionTopics).not.toHaveBeenCalled();
+    expect(dependencies.selectConnectionNews).toHaveBeenCalledWith(["transport"], date, now);
+  });
+
+  test("an old checkpoint with no matching monthly news clears its obsolete article and prompt", async () => {
+    const f = fixture({ drawing: true });
+    Object.assign(f.row, { news_from: "2026-11-18T15:00:00Z", topics: ["transport"], headline: "Old headline", sources: news.sources });
+    dependencies.selectConnectionNews.mockResolvedValue(null);
+    expect(await processConnection(id)).toEqual({ processed: true, status: "no_match" });
+    expect(f.row).toMatchObject({ headline: null, sources: [], image_prompt: null, image_path: null,
+      news_from: window.newsFrom, news_to: window.newsTo });
+    expect(dependencies.illustrate).not.toHaveBeenCalled();
+  });
+
   test("a committed research checkpoint survives a lost response without discarding it", async () => {
     const f = fixture({ checkpointResponseLost: true });
     expect(await processConnection(id)).toEqual({ processed: true, status: "queued" });
@@ -174,7 +206,7 @@ describe("connection research and image phases", () => {
     expect(f.remove).not.toHaveBeenCalled();
   });
 
-  test.each(["empty-topics", "no-news"])("%s becomes no_match with the latest window and no image request", async reason => {
+  test.each(["empty-topics", "no-news"])("%s becomes no_match with the diary month window and no image request", async reason => {
     const f = fixture({ previousImage: true });
     if (reason === "empty-topics") dependencies.extractConnectionTopics.mockResolvedValue({ topics: [] });
     else dependencies.selectConnectionNews.mockResolvedValue(null);

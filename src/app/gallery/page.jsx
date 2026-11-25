@@ -115,7 +115,7 @@ function Gallery({ month, today }) {
 
         <Link href="/connection" className={s.connection}>
           <span className={s.connectionMark} aria-hidden="true">↗</span>
-          <span><small>하루연결 · 나만의 뉴스</small><strong>내 일기에서 지금 세상으로</strong><span>기록과 닿은 최근 뉴스, 두 장의 그림으로.</span></span>
+          <span><small>하루연결 · 나만의 뉴스</small><strong>내 일기에서 그 무렵의 세상으로</strong><span>일기 날짜 기준 한 달의 뉴스, 두 장의 그림으로.</span></span>
           <IconNext />
         </Link>
 

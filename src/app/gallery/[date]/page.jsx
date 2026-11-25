@@ -271,7 +271,7 @@ function Detail({ date, today }) {
           <span><small>같은 날, 다른 시선</small><strong>이날의 만평과 나란히 보기</strong></span><IconNext />
         </Link>
         <button type="button" className={s.connectionLink} onClick={openConnection} disabled={connecting || redrawing || removing || !!(draft.trim() && !editable) || !!(editingId && !draft.trim())}>
-          <span><small>하루연결 · 내 기록에서 최근 뉴스로</small><strong>{connecting ? "조각을 저장하고 있어요…" : "내 하루와 이어지는 뉴스 보기"}</strong><span>{draft.trim() && !editable && !connecting ? "그림 완성 후 입력한 조각을 저장하고 이동해 주세요." : draft.trim() ? "입력 중인 조각을 저장하고 이동해요." : "그림이 없어도 글로 연결할 수 있어요."}</span></span><IconNext />
+          <span><small>하루연결 · 내 기록에서 그 무렵의 뉴스로</small><strong>{connecting ? "조각을 저장하고 있어요…" : "내 하루와 이어지는 뉴스 보기"}</strong><span>{draft.trim() && !editable && !connecting ? "그림 완성 후 입력한 조각을 저장하고 이동해 주세요." : draft.trim() ? "입력 중인 조각을 저장하고 이동해요." : "그림이 없어도 글로 연결할 수 있어요."}</span></span><IconNext />
         </button>
 
         {art && <SongCard

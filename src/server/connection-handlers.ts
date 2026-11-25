@@ -7,6 +7,8 @@ import { adminClient } from "./core/supabase/server";
 import { cronAuthorized } from "./core/http";
 import { connectionPayload, connectionsEnabled, processConnection } from "./connections";
 
+const connectionDate = dateSchema.refine(value => value >= "0001-01-01", "날짜를 확인해 주세요.");
+
 function resume(id: string | null) {
   if (id) after(async () => {
     try { await processConnection(id); }
@@ -15,7 +17,7 @@ function resume(id: string | null) {
 }
 export function connectionsGet(request: Request) { return run(async () => {
   const { user, profile } = await authenticated();
-  const date = dateSchema.parse(new URL(request.url).searchParams.get("date") ?? seoulDate());
+  const date = connectionDate.parse(new URL(request.url).searchParams.get("date") ?? seoulDate());
   if (date > seoulDate()) throw new HttpError(400, "아직 오지 않은 날짜예요.");
   const { payload, workId } = await connectionPayload(adminClient(), user.id, date, Boolean(profile.ai_consent_at));
   resume(workId);
@@ -25,7 +27,7 @@ export function connectionsGet(request: Request) { return run(async () => {
 export function connectionsPost(request: Request) { return run(async () => {
   mutation(request);
   const { db, user, profile } = await authenticated();
-  const p = z.object({ date: dateSchema, refresh: z.boolean().default(false), requestId: z.uuid() }).strict().parse(await body(request, 1000));
+  const p = z.object({ date: connectionDate, refresh: z.boolean().default(false), requestId: z.uuid() }).strict().parse(await body(request, 1000));
   if (p.date > seoulDate()) throw new HttpError(400, "아직 오지 않은 날짜예요.");
   if (!profile.ai_consent_at) throw new HttpError(409, "AI 전송 동의가 필요해요. 설정에서 확인해 주세요.");
   if (!connectionsEnabled()) throw new HttpError(503, "하루연결 준비 중이에요. 잠시 후 다시 찾아주세요.");

@@ -13,6 +13,17 @@ export const CONNECTION_BUCKET = "artworks";
 export function connectionsEnabled() { return process.env.DAILY_CONNECTION_ENABLED !== "false" && aiConfigured(); }
 const fresh = (row: Row, now: Date) => Boolean(row.claimed_at && Date.parse(row.claimed_at) >= now.getTime() - LEASE_MS);
 
+// Compare with the search's original clock so a same-day result does not become
+// obsolete just because its newsTo was capped before the current time.
+function matchesNewsWindow(row: Row, now: Date) {
+  const selected = new Date(row.selected_at ?? "");
+  if (!Number.isFinite(selected.getTime()) || selected.getTime() > now.getTime()) return false;
+  try {
+    const expected = connectionNewsWindow(row.entry_date, selected);
+    return Date.parse(row.news_from) === Date.parse(expected.newsFrom) && Date.parse(row.news_to) === Date.parse(expected.newsTo);
+  } catch { return false; }
+}
+
 export function connectionControls(row: Row | null, input: { enabled: boolean; consent: boolean; hasEntries: boolean; attempts: number }, now = new Date()) {
   let blockedReason: string | null = null;
   let retryAt: string | null = null;
@@ -41,6 +52,7 @@ export async function connectionPayload(db: SupabaseClient, userId: string, date
   ]);
   if (current.error || archive.error || input.error || deleted.error) throw current.error ?? archive.error ?? input.error ?? deleted.error;
   const row: Row | null = current.data;
+  const window = connectionNewsWindow(date, now);
   const hasEntries = Array.isArray(input.data?.entry_snapshot) && input.data.entry_snapshot.length > 0;
   const enabled = connectionsEnabled();
   const exhausted = Boolean(row?.status === "processing" && !fresh(row, now) && row.attempts >= 3);
@@ -57,13 +69,15 @@ export async function connectionPayload(db: SupabaseClient, userId: string, date
     // Only previously requested work is resumed by a GET; it never creates a new connection.
     workId: enabled && consent && row && (row.status === "queued" || (row.status === "processing" && !fresh(row, now))) ? row.id as string : null,
     payload: {
-      today: seoulDate(now), date, enabled, consent, hasEntries, ...controls,
+      today: seoulDate(now), date, enabled, consent, hasEntries, ...window, ...controls,
       dates: (archive.data ?? []).map(r => r.entry_date as string),
       connection: row ? {
         id: row.id, date: row.entry_date, status: viewRow!.status, stage: row.stage, topics,
         headline: row.headline, summary: row.summary, connectionReason: row.connection_reason, caption: row.caption,
         sources: row.sources ?? [], imageUrl, imageError: Boolean(row.status === "ready" && !imageUrl),
-        selectedAt: row.selected_at, newsFrom: row.news_from, newsTo: row.news_to, completedAt: row.completed_at,
+        selectedAt: row.selected_at, newsFrom: row.selected_at ? row.news_from : window.newsFrom,
+        newsTo: row.selected_at ? row.news_to : window.newsTo, completedAt: row.completed_at,
+        rangeChanged: ["ready", "no_match"].includes(row.status) && !matchesNewsWindow(row, now),
         attempts: row.attempts, maxAttempts: 3, sourceChanged: input.data?.input_fingerprint !== row.input_fingerprint,
         error: exhausted ? "연결 작업이 중단됐고 이날의 생성 횟수를 모두 사용했어요." : row.error_message,
       } : null,
@@ -107,21 +121,27 @@ export async function processConnection(id?: string) {
   let uploaded = false;
   try {
     if (!await active()) { await releaseCancelled(); return { processed: true, status: "cancelled" }; }
-    if (job.stage !== "drawing" || !job.image_prompt) {
-      const { topics } = await extractConnectionTopics({ entries: job.entry_snapshot, artworkSummary: job.artwork_summary, artworkTags: job.artwork_tags ?? [] });
+    const drawingCheckpoint = job.stage === "drawing" && Boolean(job.image_prompt);
+    if (!drawingCheckpoint || !matchesNewsWindow(job, new Date())) {
+      // A checkpoint from the former latest-news policy has no private snapshot
+      // left. Reuse only its public topic codes, then research the requested month.
+      const { topics } = drawingCheckpoint
+        ? { topics: (Array.isArray(job.topics) ? job.topics : []).filter((code: unknown): code is ConnectionTopic => typeof code === "string" && Object.hasOwn(CONNECTION_TOPICS, code)) }
+        : await extractConnectionTopics({ entries: job.entry_snapshot, artworkSummary: job.artwork_summary, artworkTags: job.artwork_tags ?? [] });
       if (!await active()) { await releaseCancelled(); return { processed: true, status: "cancelled" }; }
       const topicSaved = await update({ topics, stage: "searching" });
       if (topicSaved.error) throw topicSaved.error;
       if (!topicSaved.data) return { processed: true, status: "superseded" };
       if (!await active()) { await releaseCancelled(); return { processed: true, status: "cancelled" }; }
       const now = new Date();
-      const news = topics.length ? await selectConnectionNews(topics, now) : null;
+      const news = topics.length ? await selectConnectionNews(topics, job.entry_date, now) : null;
       if (!await active()) { await releaseCancelled(); return { processed: true, status: "cancelled" }; }
-      const window = connectionNewsWindow(now);
+      const window = connectionNewsWindow(job.entry_date, now);
       if (!news) {
         const saved = await update({ status: "no_match", topics, selected_at: now.toISOString(), news_from: window.newsFrom, news_to: window.newsTo,
           completed_at: now.toISOString(), claimed_at: null, claim_token: null, entry_snapshot: [], artwork_summary: null, artwork_tags: [],
-          image_path: null, error_message: "최근 7일의 보도에서 기록과 충분히 관련 있는 뉴스를 찾지 못했어요." });
+          headline: null, summary: null, connection_reason: null, caption: null, sources: [], image_prompt: null,
+          image_path: null, error_message: "일기 날짜 기준 이전 한 달의 보도에서 기록과 충분히 관련 있는 뉴스를 찾지 못했어요." });
         if (saved.error) throw saved.error;
         if (saved.data) await removeOwn(job.image_path);
         return { processed: true, status: saved.data ? "no_match" : "superseded" };

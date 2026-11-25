@@ -16,12 +16,12 @@ function result(overrides: Record<string, unknown> = {}) {
     id: "connection-1", date, status: "ready", stage: "drawing", topics: [{ code: "coding", label: "소프트웨어 개발" }],
     headline: "새 개발 도구가 바꾸는 코딩", summary: "보도 내용을 요약했어요.", connectionReason: "이날의 코딩 공부가 개발 도구 소식과 이어져요.",
     caption: "코딩 책 옆으로 이어진 뉴스의 길을 그렸어요.", imageUrl: "https://images.example/news.png", imageError: false,
-    sources: [{ title: "개발 도구 원문 보도", url: "https://news.example/article", publisher: "뉴스 예시", publishedAt: "2026-11-24T01:00:00Z" }],
-    selectedAt: "2026-11-25T10:00:00Z", newsFrom: "2026-11-19", newsTo: today, attempts: 1, maxAttempts: 3, sourceChanged: false, ...overrides,
+    sources: [{ title: "개발 도구 원문 보도", url: "https://news.example/article", publisher: "뉴스 예시", publishedAt: "2026-11-04T01:00:00Z" }],
+    selectedAt: "2026-11-25T10:00:00Z", newsFrom: "2026-10-04T00:00:00+09:00", newsTo: "2026-11-04T23:59:59.999+09:00", attempts: 1, maxAttempts: 3, sourceChanged: false, rangeChanged: false, ...overrides,
   };
 }
 function payload(overrides: Record<string, unknown> = {}) {
-  return { date, today, dates: [], enabled: true, consent: true, hasEntries: true, canRequest: true, canRefresh: false, blockedReason: null, retryAt: null, connection: null, ...overrides };
+  return { date, today, dates: [], newsFrom: "2026-10-04T00:00:00+09:00", newsTo: "2026-11-04T23:59:59.999+09:00", enabled: true, consent: true, hasEntries: true, canRequest: true, canRefresh: false, blockedReason: null, retryAt: null, connection: null, ...overrides };
 }
 function store(overrides: Record<string, unknown> = {}) {
   return { ready: true, authed: true, error: null, refresh: mocks.refresh, flushEntries: vi.fn(), db: { profile: { nick: "기록", consent: true }, artworks: {}, drafts: { [date]: [entry] }, ...overrides } };
@@ -46,6 +46,8 @@ describe("private diary-to-news screen", () => {
     expect(html).toContain("일기 원문과 그림에 저장된 장면 요약·태그를 OpenAI로 보내");
     expect(html).toContain("그림 파일 자체를 AI로 분석하지 않으며");
     expect(html).toContain("공개 전시에 포함되지 않아요");
+    expect(html).toContain("일기 날짜 기준 이전 한 달(당일 포함)");
+    expect(html).toContain("새로 연결할 뉴스 범위 · 2026. 10. 4. – 2026. 11. 4.");
     expect(mocks.start).not.toHaveBeenCalled();
   });
 
@@ -73,17 +75,19 @@ describe("private diary-to-news screen", () => {
     expect(html).not.toContain('value="2026-11-26"');
   });
 
-  test("a saved result keeps the existing personal picture and distinguishes the old diary from recent news", () => {
+  test("a saved result keeps the personal picture and shows the diary-relative publication range separately from search time", () => {
     mocks.store.mockReturnValue(store({ artworks: { [date]: { status: "ready", imageUrl: "https://images.example/personal.png", summary: "나의 코딩 공부", entries: [entry] } } }));
     setPayload(payload({ connection: result(), canRequest: false, canRefresh: true }));
     const html = render();
     expect(html).toContain('src="https://images.example/personal.png"');
     expect(html).toContain('src="https://images.example/news.png"');
-    expect(html).toContain("최근 7일 보도");
+    expect(html).toContain("일기 날짜 기준 이전 한 달(당일 포함)");
     expect(html).toMatch(/datetime="2026-11-25T10:00:00Z"/i);
-    expect(html).toContain("2026. 11. 19.");
+    expect(html).toContain("2026. 10. 4. – 2026. 11. 4.");
     expect(html).toContain("보도 검색 범위");
-    expect(html).toContain("최신 뉴스 다시 연결하기");
+    expect(html).toContain("뉴스 다시 연결하기");
+    expect(html).not.toContain("최근 7일");
+    expect(html).not.toContain("저장된 뉴스의 검색 범위가 달라요");
     expect(html).toContain("저장된 결과예요");
     expect(html).toContain('href="https://news.example/article"');
     expect(html).toContain("내 하루와 이어지는 지점");
@@ -94,7 +98,8 @@ describe("private diary-to-news screen", () => {
     const html = render();
     expect(html).toContain("잘 맞는 뉴스를 찾지 못했어요");
     expect(html).not.toContain("<img");
-    expect(html).toContain("최신 뉴스 다시 연결하기");
+    expect(html).toContain("뉴스 다시 연결하기");
+    expect(html).toContain("검색 범위 안에서 충분히 관련 있는 기사");
   });
 
   test("changed records identify the displayed result as based on previous diary content", () => {
@@ -102,20 +107,34 @@ describe("private diary-to-news screen", () => {
     expect(render()).toContain("아래 뉴스는 이전 조각글·장면을 바탕으로 찾았어요");
   });
 
+  test("a legacy saved result retains its actual old range and image until the user reconnects", () => {
+    setPayload(payload({ connection: result({ rangeChanged: true, newsFrom: "2026-11-19T00:00:00+09:00", newsTo: "2026-11-25T19:00:00+09:00" }), canRequest: false, canRefresh: true }));
+    const html = render();
+    expect(html).toContain('src="https://images.example/news.png"');
+    expect(html).toContain("저장된 뉴스의 검색 범위가 달라요");
+    expect(html).toContain("아래 결과는 이전 검색 범위로 저장됐어요");
+    expect(html).toContain("보도 범위 · 2026. 11. 19. – 2026. 11. 25.");
+    expect(html).toContain("새로 연결할 뉴스 범위 · 2026. 10. 4. – 2026. 11. 4.");
+    expect(html).toContain("뉴스 다시 연결하기");
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+
   test("withdrawing consent keeps saved images readable but disables new requests", () => {
     setPayload(payload({ connection: result(), consent: false, canRequest: false, canRefresh: false }));
     const html = render();
     expect(html).toContain('src="https://images.example/news.png"');
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>최신 뉴스 다시 연결하기/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>뉴스 다시 연결하기/);
     expect(html).toContain("동의 설정하기");
   });
 
-  test("approved work shows its stage and does not expose a second generation action", () => {
-    setPayload(payload({ connection: result({ status: "processing", stage: "searching", headline: null, imageUrl: null }), canRequest: false }));
+  test.each([null, undefined, ""])("approved work with selectedAt=%s shows its stage without a fabricated search time or second action", selectedAt => {
+    setPayload(payload({ connection: result({ status: "processing", stage: "searching", headline: null, imageUrl: null, selectedAt }), canRequest: false }));
     const html = render();
     expect(html).toContain("뉴스 찾기 중…");
-    expect(html).not.toContain("최신 뉴스 다시 연결하기");
+    expect(html).not.toContain("뉴스 다시 연결하기");
     expect(html).not.toContain("<img");
+    expect(html).not.toContain("뉴스 검색 ·");
+    expect(html).not.toContain("1970");
     expect(mocks.start).not.toHaveBeenCalled();
   });
 
