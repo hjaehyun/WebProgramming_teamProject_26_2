@@ -43,6 +43,7 @@ beforeEach(() => {
   vi.stubEnv("OPENAI_TEXT_MODEL", " gpt-6-luna ");
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "info").mockImplementation(() => {});
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -102,6 +103,27 @@ describe("grounded editorial news selection", () => {
   test("uses the Korean day rather than the UTC calendar date", async () => {
     respond(research(articles.map(a => ({ ...a, publishedAt: "2026-11-24T15:00:00Z" }))));
     expect((await selectCartoonNews(day, now))?.sources[0].publishedAt).toBe("2026-11-24T15:00:00.000Z");
+  });
+
+  test("a historical edition searches that complete KST day while recording the actual selection time", async () => {
+    const selectedLater = new Date("2026-12-02T01:00:00Z");
+    respond(research(articles.map(a => ({ ...a, publishedAt: "2026-11-25T23:59:59.999+09:00" }))));
+    const result = await selectCartoonNews(day, selectedLater);
+    expect(result?.sources).toHaveLength(2);
+    expect(result?.selectedAt).toBe(selectedLater.toISOString());
+    const cutoff = "2026-11-25T14:59:59.999Z";
+    expect(JSON.parse(sent(0).input)).toEqual({ date: day, timezone: "Asia/Seoul", cutoff,
+      searchPhrases: ["2026년 11월 25일 주요 뉴스", "2026-11-25 주요 뉴스"] });
+    expect(sent(0).max_tool_calls).toBe(6);
+    expect(JSON.parse(sent(1).input)).toMatchObject({ date: day, cutoff });
+    expect(sent(0).instructions).toContain("never substitute current news");
+    expect(sent(1).instructions).toContain("hindsight");
+  });
+
+  test.each(["2026-11-24T23:59:59.999+09:00", "2026-11-26T00:00:00+09:00", "2026-12-02T09:00:00+09:00"])("historical editions reject neighboring or current-day reporting %s", async publishedAt => {
+    fetchMock.mockResolvedValueOnce(Response.json(research([{ ...articles[0], publishedAt }, articles[1]])));
+    expect(await selectCartoonNews(day, new Date("2026-12-02T01:00:00Z"))).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test.each([

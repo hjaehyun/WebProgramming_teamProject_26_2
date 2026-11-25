@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 describe("daily cartoon hook request lifecycle", () => {
-  test("an eligible empty today starts once with an empty body and serializes concurrent actions", async () => {
+  test("an eligible empty today starts once with its displayed date and serializes concurrent actions", async () => {
     const post = deferred<Response>();
     fetchMock.mockResolvedValueOnce(response(snapshot(null, { canRequest: true })))
       .mockImplementationOnce(() => post.promise)
@@ -61,7 +61,7 @@ describe("daily cartoon hook request lifecycle", () => {
     await settle();
     expect(methods()).toEqual(["GET", "POST"]);
     expect(screen.view.posting).toBe(true);
-    expect(JSON.parse(String(posts()[0][1]?.body))).toEqual({});
+    expect(JSON.parse(String(posts()[0][1]?.body))).toEqual({ date: today });
     await screen.session.refresh();
     await screen.session.start();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -165,16 +165,139 @@ describe("daily cartoon hook request lifecycle", () => {
     expect(posts()).toHaveLength(0);
   });
 
-  test("a past date never starts a job and never clears today's attempt latch", async () => {
+  test("a past date waits for explicit generation and never clears today's attempt latch", async () => {
     fetchMock.mockResolvedValueOnce(response(snapshot(null)))
-      .mockResolvedValueOnce(response(snapshot(null, { canRequest: true })));
+      .mockResolvedValueOnce(response(snapshot(null, { canRequest: true })))
+      .mockResolvedValueOnce(response(snapshot("processing", { cartoon: { date: yesterday, status: "processing" } })));
     const screen = mount(yesterday, new Set([today]));
     await settle();
     expect(screen.autoRequested.has(today)).toBe(true);
     await screen.session.refresh();
+    expect(posts()).toHaveLength(0);
+    await screen.session.start();
+    expect(posts()).toHaveLength(1);
+    expect(JSON.parse(String(posts()[0][1]?.body))).toEqual({ date: yesterday });
+    expect(screen.autoRequested.has(today)).toBe(true);
+    expect(screen.view.payload?.cartoon?.date).toBe(yesterday);
+  });
+
+  test.each(["queued", "processing"])("an already requested past %s job may automatically resume", async status => {
+    fetchMock.mockResolvedValueOnce(response(snapshot(status, { canRequest: true, cartoon: { date: yesterday, status } })))
+      .mockResolvedValueOnce(response(snapshot("processing", { cartoon: { date: yesterday, status: "processing" } })));
+    const screen = mount(yesterday);
+    await settle();
+    expect(posts()).toHaveLength(1);
+    expect(JSON.parse(String(posts()[0][1]?.body))).toEqual({ date: yesterday });
+    expect(screen.view.payload?.cartoon?.date).toBe(yesterday);
+  });
+
+  test("a past failure refreshes permission after cooldown but waits for manual retry", async () => {
+    const retryAt = new Date(now.getTime() + 10000).toISOString();
+    fetchMock.mockResolvedValueOnce(response(snapshot("failed", { cartoon: { date: yesterday, status: "failed", retryAt } })))
+      .mockResolvedValueOnce(response(snapshot("failed", { canRequest: true, cartoon: { date: yesterday, status: "failed" } })))
+      .mockResolvedValueOnce(response(snapshot("processing", { cartoon: { date: yesterday, status: "processing" } })));
+    const screen = mount(yesterday, new Set([yesterday]));
+    await settle();
+    await vi.advanceTimersByTimeAsync(11000);
+    expect(methods()).toEqual(["GET", "GET"]);
+    expect(screen.view.payload?.canRequest).toBe(true);
+    await screen.session.start();
+    expect(methods()).toEqual(["GET", "GET", "POST"]);
+  });
+
+  test("an accepted past retry keeps observing the old failed row until processing and ready appear", async () => {
+    const failed = snapshot("failed", { canRequest: true, cartoon: { date: yesterday, status: "failed", retryAt: now.toISOString() } });
+    fetchMock.mockResolvedValueOnce(response(failed))
+      .mockResolvedValueOnce(response(failed, 202))
+      .mockResolvedValueOnce(response(failed))
+      .mockResolvedValueOnce(response(snapshot("processing", { cartoon: { date: yesterday, status: "processing" } })))
+      .mockResolvedValueOnce(response(snapshot("ready", { cartoon: { date: yesterday, status: "ready" } })));
+    const screen = mount(yesterday);
+    await settle(); await screen.session.start();
+    expect(screen.view.posting).toBe(true);
+    await screen.session.start();
+    expect(posts()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.view.posting).toBe(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.view.payload?.cartoon?.status).toBe("processing");
+    expect(screen.view.posting).toBe(false);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.view.payload?.cartoon?.status).toBe("ready");
+    expect(posts()).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("an accepted retry with no visible start stops observing after thirty seconds without another POST", async () => {
+    const failed = snapshot("failed", { canRequest: true, cartoon: { date: yesterday, status: "failed", retryAt: now.toISOString() } });
+    fetchMock.mockImplementation(async (_url, options) => response(failed, options?.method === "POST" ? 202 : 200));
+    const screen = mount(yesterday);
+    await settle(); await screen.session.start();
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(screen.view.posting).toBe(true);
+    expect(posts()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(screen.view.posting).toBe(false);
+    expect(screen.view.payload?.cartoon?.status).toBe("failed");
+    expect(vi.getTimerCount()).toBe(0);
+    const callsAtDeadline = fetchMock.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(fetchMock).toHaveBeenCalledTimes(callsAtDeadline);
+    expect(posts()).toHaveLength(1);
+  });
+
+  test("a fresh failure cooldown ends accepted-retry waiting without waiting for the deadline", async () => {
+    const failed = snapshot("failed", { canRequest: true, cartoon: { date: yesterday, status: "failed", retryAt: now.toISOString() } });
+    const retryAt = new Date(now.getTime() + 15 * 60000).toISOString();
+    fetchMock.mockResolvedValueOnce(response(failed))
+      .mockResolvedValueOnce(response(failed, 202))
+      .mockResolvedValueOnce(response(snapshot("failed", { cartoon: { date: yesterday, status: "failed", retryAt } })));
+    const screen = mount(yesterday);
+    await settle(); await screen.session.start();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.view.posting).toBe(false);
+    expect(screen.view.payload?.canRequest).toBe(false);
+    const callsAfterClaim = fetchMock.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(fetchMock).toHaveBeenCalledTimes(callsAfterClaim);
+    expect(posts()).toHaveLength(1);
+  });
+
+  test("an edition opened before midnight still sends that edition's date after midnight", async () => {
+    const post = deferred<Response>();
+    fetchMock.mockResolvedValueOnce(response(snapshot(null, { canRequest: true })))
+      .mockImplementationOnce(() => post.promise);
+    const screen = mount(today);
+    await settle();
+    vi.setSystemTime(new Date("2026-11-25T15:00:01Z"));
+    post.resolve(response(snapshot("ready", { today: "2026-11-26" })));
+    await settle();
+    expect(JSON.parse(String(posts()[0][1]?.body))).toEqual({ date: today });
+    expect(screen.view.payload?.cartoon?.date).toBe(today);
+    expect(screen.view.error).toBeNull();
+    expect(posts()).toHaveLength(1);
+  });
+
+  test("a mismatched read cannot display or start another day's edition", async () => {
+    fetchMock.mockResolvedValueOnce(response(snapshot("ready", { canRequest: true })));
+    const screen = mount(yesterday);
+    await settle();
+    expect(screen.view.payload).toBeNull();
+    expect(screen.view.error).toContain("선택한 날짜");
     await screen.session.start();
     expect(posts()).toHaveLength(0);
-    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("a lost past-date POST reads its original date without starting a second job", async () => {
+    fetchMock.mockResolvedValueOnce(response(snapshot(null, { canRequest: true })))
+      .mockRejectedValueOnce(new TypeError("connection lost"))
+      .mockResolvedValueOnce(response(snapshot("processing", { cartoon: { date: yesterday, status: "processing" } })));
+    const screen = mount(yesterday);
+    await settle(); await screen.session.start();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchMock.mock.calls[2][0]).toBe(`/api/cartoons?date=${yesterday}`);
+    expect(screen.view.payload?.cartoon?.date).toBe(yesterday);
+    expect(posts()).toHaveLength(1);
   });
 
   test("before publication time it waits for availableAt and checks permission before starting", async () => {

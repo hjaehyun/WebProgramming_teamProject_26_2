@@ -13,9 +13,12 @@ type Job = {
 };
 let db: PGlite;
 let today: string;
+let past: string;
+const pastMigration = "supabase/migrations/20261125125132_past_daily_cartoons.sql";
 const publicColumns = "cartoon_date,status,stage,headline,summary,selection_reason,caption,sources,selected_at,completed_at,retry_after,error_message,created_at";
-const enqueue = () => db.query<Job>("select * from public.enqueue_daily_cartoon()");
-const claim = () => db.query<Job>("select * from public.claim_daily_cartoon($1::date)", [today]);
+const enqueue = (day?: string) => day === undefined ? db.query<Job>("select * from public.enqueue_daily_cartoon()")
+  : db.query<Job>("select * from public.enqueue_daily_cartoon($1::date)", [day]);
+const claim = (day = today) => db.query<Job>("select * from public.claim_daily_cartoon($1::date)", [day]);
 const asWorker = () => db.exec("reset role; set role service_role");
 
 beforeAll(async () => {
@@ -33,7 +36,9 @@ beforeAll(async () => {
     insert into storage.buckets values('existing-bucket','Existing',true,1024,array['image/png']);
   `);
   await db.exec(await readFile("supabase/migrations/20261125103138_daily_editorial_cartoons.sql", "utf8"));
+  await db.exec(await readFile(pastMigration, "utf8"));
   today = (await db.query<{ day: string }>("select ((now() at time zone 'Asia/Seoul')::date)::text as day")).rows[0].day;
+  past = (await db.query<{ day: string }>("select ((now() at time zone 'Asia/Seoul')::date - 30)::text as day")).rows[0].day;
 }, 30000);
 
 beforeEach(async () => {
@@ -51,13 +56,25 @@ describe("daily editorial cartoon database", () => {
     ]);
   });
 
-  test.each(["-1", "1", "null"])("enqueue and claim reject a non-today date (%s)", async offset => {
-    const expression = offset === "null" ? "null::date" : `($1::date + ${offset})`;
-    const args = offset === "null" ? [] : [today];
+  test.each(["future", "null", "infinity", "-infinity"])("enqueue and claim reject invalid dates (%s)", async kind => {
+    const expression = kind === "future" ? "($1::date + 1)" : kind === "null" ? "null::date" : `'${kind}'::date`;
+    const args = kind === "future" ? [today] : [];
     for (const rpc of ["enqueue_daily_cartoon", "claim_daily_cartoon"]) {
-      await expect(db.query(`select * from public.${rpc}(${expression})`, args)).rejects.toThrow(/오늘 날짜/);
+      await expect(db.query(`select * from public.${rpc}(${expression})`, args)).rejects.toThrow(/오늘 또는 지난 날짜/);
     }
     expect((await db.query("select * from public.daily_cartoons")).rows).toHaveLength(0);
+  });
+
+  test("past editions have their own shared row and budget without changing today's job", async () => {
+    await enqueue();
+    const todayBefore = (await db.query("select to_jsonb(c) as row from public.daily_cartoons c where cartoon_date=$1", [today])).rows;
+    const enqueued = await Promise.all(Array.from({ length: 8 }, () => enqueue(past)));
+    expect(enqueued.flatMap(r => r.rows)).toHaveLength(1);
+    const claims = await Promise.all(Array.from({ length: 8 }, () => claim(past)));
+    expect(claims.flatMap(r => r.rows)).toMatchObject([{ cartoon_date: new Date(`${past}T00:00:00Z`), status: "processing", attempts: 1 }]);
+    expect((await enqueue(past)).rows).toHaveLength(0);
+    expect((await claim(past)).rows).toHaveLength(0);
+    expect((await db.query("select to_jsonb(c) as row from public.daily_cartoons c where cartoon_date=$1", [today])).rows).toEqual(todayBefore);
   });
 
   test("duplicate claims have one winner and do not consume additional attempts", async () => {
@@ -73,16 +90,17 @@ describe("daily editorial cartoon database", () => {
     expect((await db.query<Job>("select * from public.daily_cartoons")).rows[0].attempts).toBe(1);
   });
 
-  test("failed jobs wait for the 15-minute deadline, then resume drawing with a new token", async () => {
-    await enqueue();
-    const first = (await claim()).rows[0];
+  test.each(["today", "past"])("%s failed jobs wait for the deadline, then resume drawing with a new token", async edition => {
+    const day = edition === "past" ? past : today;
+    await enqueue(day);
+    const first = (await claim(day)).rows[0];
     await db.exec("update public.daily_cartoons set status='failed',image_prompt='An editorial illustration',headline='Saved news',retry_after=now()+interval '15 minutes',error_message='Temporary failure'");
-    expect((await claim()).rows).toHaveLength(0);
+    expect((await claim(day)).rows).toHaveLength(0);
     await db.exec("update public.daily_cartoons set retry_after=now()-interval '1 second'");
-    const resumed = (await claim()).rows[0];
+    const resumed = (await claim(day)).rows[0];
     expect(resumed).toMatchObject({ status: "processing", stage: "drawing", attempts: 2, image_prompt: "An editorial illustration", retry_after: null, error_message: null });
     expect(resumed.claim_token).not.toBe(first.claim_token);
-    expect((await db.query("update public.daily_cartoons set status='ready' where cartoon_date=$1::date and status='processing' and claim_token=$2 returning cartoon_date", [today, first.claim_token])).rows).toHaveLength(0);
+    expect((await db.query("update public.daily_cartoons set status='ready' where cartoon_date=$1::date and status='processing' and claim_token=$2 returning cartoon_date", [day, first.claim_token])).rows).toHaveLength(0);
   });
 
   test("a failed job without an explicit retry deadline cannot be reclaimed", async () => {
@@ -99,35 +117,47 @@ describe("daily editorial cartoon database", () => {
     expect((await db.query<Job>("select * from public.daily_cartoons")).rows[0].attempts).toBe(1);
   });
 
-  test("stale claims recover up to three attempts, then stop terminally", async () => {
-    await enqueue();
-    let current = (await claim()).rows[0];
+  test.each(["today", "past"])("%s stale claims recover up to three attempts, then stop terminally", async edition => {
+    const day = edition === "past" ? past : today;
+    await enqueue(day);
+    let current = (await claim(day)).rows[0];
     await db.exec("update public.daily_cartoons set claimed_at=now()-interval '9 minutes'");
-    expect((await claim()).rows).toHaveLength(0);
+    expect((await claim(day)).rows).toHaveLength(0);
     for (const attempts of [2, 3]) {
       await db.exec("update public.daily_cartoons set claimed_at=now()-interval '11 minutes'");
-      const next = (await claim()).rows[0];
+      const next = (await claim(day)).rows[0];
       expect(next.attempts).toBe(attempts);
       expect(next.claim_token).not.toBe(current.claim_token);
       current = next;
     }
     await db.exec("update public.daily_cartoons set claimed_at=now()-interval '11 minutes'");
-    expect((await claim()).rows).toHaveLength(0);
+    expect((await claim(day)).rows).toHaveLength(0);
     expect((await db.query<Job>("select * from public.daily_cartoons")).rows[0]).toMatchObject({ status: "failed", attempts: 3, retry_after: null });
     await db.exec("update public.daily_cartoons set retry_after=now()-interval '1 second'");
-    expect((await claim()).rows).toHaveLength(0);
-    expect((await enqueue()).rows).toHaveLength(0);
+    expect((await claim(day)).rows).toHaveLength(0);
+    expect((await enqueue(day)).rows).toHaveLength(0);
     expect((await db.query<Job>("select * from public.daily_cartoons")).rows[0].attempts).toBe(3);
   });
 
-  test.each(["ready", "unavailable"])("%s is never reset or regenerated", async status => {
-    await enqueue(); await claim();
+  test.each(["ready", "unavailable"].flatMap(status => ["today", "past"].map(edition => ({ status, edition }))))("$edition $status is never reset or regenerated", async ({ status, edition }) => {
+    const day = edition === "past" ? past : today;
+    await enqueue(day); await claim(day);
     await db.query("update public.daily_cartoons set status=$1,headline='Existing result',sources='[{\"url\":\"https://example.test/news\"}]',image_path='existing.png',completed_at=now(),claimed_at=now()-interval '11 minutes',retry_after=now()-interval '1 minute'", [status]);
     const snapshot = async () => (await db.query("select to_jsonb(c) as row from public.daily_cartoons c")).rows;
     const before = await snapshot();
-    expect((await enqueue()).rows).toHaveLength(0);
-    expect((await claim()).rows).toHaveLength(0);
+    expect((await enqueue(day)).rows).toHaveLength(0);
+    expect((await claim(day)).rows).toHaveLength(0);
     expect(await snapshot()).toEqual(before);
+  });
+
+  test("the additive migration preserves completed editions and their timestamps", async () => {
+    await enqueue(past); await claim(past);
+    await db.exec("update public.daily_cartoons set status='ready',headline='Saved edition',summary='Saved summary',image_path='existing.png',completed_at=now()");
+    const before = (await db.query("select to_jsonb(c) as row from public.daily_cartoons c")).rows;
+    await db.exec("reset role");
+    await db.exec(await readFile(pastMigration, "utf8"));
+    await asWorker();
+    expect((await db.query("select to_jsonb(c) as row from public.daily_cartoons c")).rows).toEqual(before);
   });
 
   test("the table rejects invalid status, stage, attempts, sources and oversized public text", async () => {

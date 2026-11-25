@@ -13,9 +13,19 @@
 .editionRow { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 0; border-top: 1px solid var(--paper-line); }
 .editionTag { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: #645F53; }
 .editionTag i { width: 5px; height: 5px; border-radius: 50%; background: #A74430; }
-.datePicker { position: relative; width: 100%; }
-.datePicker select { width: 100%; min-height: 40px; padding: 5px 22px 5px 0; border: 0; background: transparent; color: var(--paper-ink); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
-.datePicker select:focus-visible, .paper button:focus-visible, .paper a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.dateForm { display: flex; align-items: flex-end; gap: 8px; width: 100%; margin-top: 5px; }
+.datePicker { flex: 1; min-width: 0; }
+.datePicker > span, .archivePicker > span { display: block; margin-bottom: 6px; color: #736D60; font-size: 10px; }
+.datePicker input { width: 100%; min-width: 0; min-height: 42px; padding: 8px; border: 1px solid var(--paper-line); border-radius: 5px; background: #FFFDFA; color: var(--paper-ink); font-family: inherit; font-size: 14px; font-weight: 700; }
+.dateForm button { flex-shrink: 0; min-height: 42px; padding: 8px 12px; border: 1px solid #B4A78E; border-radius: 5px; background: #EEE7D9; color: #554C3D; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.dateForm button:disabled { opacity: .5; cursor: not-allowed; }
+.dateHelp { margin: 3px 0 7px; color: #736D60; font-size: 10px; line-height: 1.7; }
+.archivePicker { width: 100%; }
+.archivePicker select { width: 100%; min-height: 38px; padding: 5px 22px 5px 0; border: 0; background: transparent; color: var(--paper-ink); font-family: inherit; font-size: 13px; cursor: pointer; }
+.datePicker input:focus-visible, .archivePicker select:focus-visible, .paper button:focus-visible, .paper a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.invalid { padding: 32px 24px; font-size: 14px; line-height: 1.8; }
+.invalid h2 { font-size: 20px; }
+.invalid a { display: inline-flex; min-height: 44px; align-items: center; color: #8D3D2D; }
 .lead { padding: 22px 0 14px; }
 .kicker { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #8D3D2D; font-size: 10px; font-weight: 700; }
 .kicker > span:first-child { letter-spacing: .03em; }

@@ -40,7 +40,7 @@ function fixture() {
     return { select: () => ({ eq: () => ({ single: async () => ({ data: { ...profile }, error: null }) }) }) };
   }) };
   mocks.userClient.mockResolvedValue(client); mocks.adminClient.mockReturnValue(admin);
-  mocks.enqueue.mockImplementation(async () => { if (!row) row = { cartoon_date: date, status: "queued", stage: "searching", attempts: 0, claimed_at: null, sources: [] }; });
+  mocks.enqueue.mockImplementation(async (day: string) => { if (!row) row = { cartoon_date: day, status: "queued", stage: "searching", attempts: 0, claimed_at: null, sources: [] }; });
   return { admin, sign, profile, getUser, tables, setRow: (value: Row | null) => { row = value; } };
 }
 const get = (day?: string) => cartoonsGet(new Request(`${origin}/api/cartoons${day ? `?date=${day}` : ""}`));
@@ -61,12 +61,14 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("cartoon request eligibility", () => {
-  test("requires the same KST day and opens exactly at 19:00", () => {
+  test("opens today's edition at 19:00 and allows past but never future editions", () => {
     expect(cartoonCanRequest(null, date, new Date(now.getTime() - 1))).toBe(false);
     expect(cartoonCanRequest(null, date, now)).toBe(true);
-    expect(cartoonCanRequest(null, "2026-11-24", now)).toBe(false);
+    expect(cartoonCanRequest(null, "2026-11-24", now)).toBe(true);
     expect(cartoonCanRequest(null, "2026-11-26", now)).toBe(false);
-    expect(cartoonCanRequest(null, date, new Date("2026-11-25T15:00:00Z"))).toBe(false);
+    expect(cartoonCanRequest(null, date, new Date("2026-11-25T15:00:00Z"))).toBe(true);
+    expect(cartoonCanRequest(null, "2026-02-30", now)).toBe(false);
+    expect(cartoonCanRequest(null, date, new Date("invalid"))).toBe(false);
   });
 
   test("respects retry deadlines, ten-minute leases, completed outcomes and the three-attempt cap", () => {
@@ -99,15 +101,15 @@ describe("cartoon API boundaries and background scheduling", () => {
   });
 
   test("GET rejects invalid/future dates but allows archived editions", async () => {
-    for (const day of ["2026-02-30", "not-a-date", "2026-11-26"]) expect((await get(day)).status).toBe(400);
+    for (const day of ["0000-01-01", "2026-02-30", "not-a-date", "2026-11-26"]) expect((await get(day)).status).toBe(400);
     f.setRow({ cartoon_date: "2026-11-24", status: "ready", stage: "drawing", attempts: 1, sources: [] });
     const response = await get("2026-11-24"); expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ canRequest: false, cartoon: { date: "2026-11-24", status: "ready" } });
     expect(mocks.enqueue).not.toHaveBeenCalled(); expect(mocks.after).not.toHaveBeenCalled();
   });
 
-  test("POST accepts only an empty body and never takes a caller-selected date or journal", async () => {
-    for (const payload of [{ date: "2026-11-24" }, { date: "2026-11-26" }, { entries: ["private journal"] }, null, []]) expect((await post(payload)).status).toBe(400);
+  test("POST rejects invalid/future dates and private or unknown fields before enqueueing", async () => {
+    for (const payload of [{ date: "0000-01-01" }, { date: "2026-02-30" }, { date: "2026-11-26" }, { date: null }, { date: "" }, { date: date, entries: ["private journal"] }, { userId: "someone" }, null, []]) expect((await post(payload)).status).toBe(400);
     expect((await post({ value: "x".repeat(1001) })).status).toBe(413);
     expect(mocks.enqueue).not.toHaveBeenCalled(); expect(mocks.after).not.toHaveBeenCalled();
   });
@@ -116,6 +118,28 @@ describe("cartoon API boundaries and background scheduling", () => {
     vi.setSystemTime(new Date(now.getTime() - 1));
     expect((await post()).status).toBe(409);
     expect(mocks.enqueue).not.toHaveBeenCalled(); expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  test("a past date can start before today's release and keeps its selected date through the worker", async () => {
+    vi.setSystemTime(new Date(`${date}T00:00:00Z`));
+    const previous = "2026-11-24";
+    const response = await post({ date: previous });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({ canRequest: true, cartoon: { date: previous, status: "queued" } });
+    expect(mocks.enqueue).toHaveBeenCalledWith(previous);
+    expect(background).toHaveLength(1);
+    await background[0]();
+    expect(mocks.worker).toHaveBeenCalledWith(previous);
+  });
+
+  test("past ready editions stay unchanged and exhausted past attempts schedule no work", async () => {
+    for (const status of ["ready", "unavailable", "failed"]) {
+      f.setRow({ cartoon_date: "2026-11-24", status, attempts: 3, sources: [] });
+      const response = await post({ date: "2026-11-24" });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ canRequest: false, cartoon: { date: "2026-11-24", status } });
+    }
+    expect(mocks.after).not.toHaveBeenCalled();
   });
 
   test("POST returns a 202 first and runs the worker only in the after callback", async () => {
@@ -181,10 +205,16 @@ describe("cartoon public DTO", () => {
     expect(f.sign).not.toHaveBeenCalled();
   });
 
-  test("an expired previous-day job is shown as failed and cannot request new news", async () => {
+  test("a stale previous-day job remains resumable within its attempt budget", async () => {
     f.setRow({ cartoon_date: "2026-11-24", status: "processing", attempts: 1, claimed_at: "2026-11-24T10:00:00Z" });
     const payload = await cartoonPayload(f.admin as never, "2026-11-24", now);
-    expect(payload).toMatchObject({ canRequest: false, cartoon: { status: "failed" } });
+    expect(payload).toMatchObject({ canRequest: true, cartoon: { status: "processing" } });
+  });
+
+  test("an exhausted stale past job is presented as a terminal failure", async () => {
+    f.setRow({ cartoon_date: "2026-11-24", status: "processing", attempts: 3, claimed_at: "2026-11-24T10:00:00Z" });
+    const payload = await cartoonPayload(f.admin as never, "2026-11-24", now);
+    expect(payload).toMatchObject({ canRequest: false, cartoon: { status: "failed", retryAt: null } });
   });
 });
 function newsSources() { return [{ title: "확인한 뉴스", url: "https://example.test/news", publishedAt: now.toISOString() }]; }

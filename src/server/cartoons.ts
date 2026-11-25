@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { aiConfigured, illustrate } from "./core/ai";
-import { seoulDate } from "./core/domain";
+import { dateSchema, seoulDate } from "./core/domain";
 import { adminClient } from "./core/supabase/server";
 import { selectCartoonNews } from "./cartoon-news";
 
@@ -17,9 +17,10 @@ export function cartoonsEnabled() {
 
 export function cartoonAvailableAt(date: string) { return `${date}T19:00:00+09:00`; }
 
-/** No backfilling old days: a later day's news must never masquerade as that day's edition. */
+/** Past editions use only articles published on their requested Korean calendar date. */
 export function cartoonCanRequest(row: Row | null, date: string, now = new Date()) {
-  if (!cartoonsEnabled() || date !== seoulDate(now) || now.getTime() < Date.parse(cartoonAvailableAt(date))) return false;
+  if (!cartoonsEnabled() || !dateSchema.safeParse(date).success || !Number.isFinite(now.getTime())
+    || date < "0001-01-01" || date > seoulDate(now) || now.getTime() < Date.parse(cartoonAvailableAt(date))) return false;
   if (!row) return true;
   if (row.attempts >= 3 || ["ready", "unavailable"].includes(row.status)) return false;
   if (row.status === "processing") return Boolean(row.claimed_at && Date.parse(row.claimed_at) < now.getTime() - LEASE_MS);
@@ -40,8 +41,7 @@ export async function cartoonPayload(db: SupabaseClient, date: string, now = new
     if (!signed.error) imageUrl = signed.data?.signedUrl ?? null;
   }
   const stale = row && (!row.claimed_at || Date.parse(row.claimed_at) < now.getTime() - LEASE_MS);
-  const expired = row && stale && ["queued", "processing"].includes(row.status)
-    && (date < seoulDate(now) || row.attempts >= 3);
+  const expired = row && stale && ["queued", "processing"].includes(row.status) && row.attempts >= 3;
   return {
     today: seoulDate(now), enabled: cartoonsEnabled(), availableAt: cartoonAvailableAt(date),
     canRequest: cartoonCanRequest(row, date, now),
@@ -52,7 +52,7 @@ export async function cartoonPayload(db: SupabaseClient, date: string, now = new
       caption: row.caption, sources: row.sources ?? [], imageUrl,
       imageError: Boolean(row.status === "ready" && row.image_path && !imageUrl),
       selectedAt: row.selected_at, completedAt: row.completed_at, retryAt: row.attempts < 3 ? row.retry_after : null,
-      error: expired ? "이날의 만평 생성이 중단됐어요. 다음 날의 만평을 기다려 주세요." : row.error_message,
+      error: expired ? "이날의 만평 생성이 중단됐어요. 생성 시도 횟수를 모두 사용했어요." : row.error_message,
     } : null,
   };
 }
@@ -82,7 +82,7 @@ export async function processDailyCartoon(date = seoulDate()) {
       const news = await selectCartoonNews(job.cartoon_date);
       if (!news) {
         const unavailable = await update({ status: "unavailable", completed_at: new Date().toISOString(),
-          error_message: "오늘 날짜와 출처를 충분히 확인할 수 있는 대표 뉴스를 찾지 못했어요." });
+          error_message: "선택한 날짜와 출처를 충분히 확인할 수 있는 대표 뉴스를 찾지 못했어요." });
         if (unavailable.error) throw unavailable.error;
         return { processed: true, status: unavailable.data ? "unavailable" : "superseded" };
       }
@@ -116,7 +116,7 @@ export async function processDailyCartoon(date = seoulDate()) {
         return { processed: true, status: current.data.status };
       }
       const failed = await update({ status: "failed", retry_after: new Date(Date.now() + RETRY_MS).toISOString(),
-        error_message: job.attempts >= 3 ? "오늘의 만평을 완성하지 못했어요. 다음 날 다시 찾아주세요."
+        error_message: job.attempts >= 3 ? "이날의 만평을 완성하지 못했어요. 생성 시도 횟수를 모두 사용했어요."
           : "뉴스 확인 또는 그림 생성이 잠시 지연되고 있어요. 15분 뒤 다시 시도할 수 있어요." });
       if (failed.error || !failed.data) throw new Error("Cartoon failure transition unavailable");
       if (uploaded && current.data.image_path !== path) await db.storage.from(CARTOON_BUCKET).remove([path]);

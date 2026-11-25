@@ -7,9 +7,11 @@ import { adminClient } from "./core/supabase/server";
 import { cronAuthorized } from "./core/http";
 import { cartoonAvailableAt, cartoonPayload, cartoonsEnabled, enqueueCartoon, processDailyCartoon } from "./cartoons";
 
+const editionDate = dateSchema.refine(value => value >= "0001-01-01", "날짜를 확인해 주세요.");
+
 export function cartoonsGet(request: Request) { return run(async () => {
   await authenticated();
-  const date = dateSchema.parse(new URL(request.url).searchParams.get("date") ?? seoulDate());
+  const date = editionDate.parse(new URL(request.url).searchParams.get("date") ?? seoulDate());
   if (date > seoulDate()) throw new HttpError(400, "아직 오지 않은 날짜예요.");
   return json(await cartoonPayload(adminClient(), date));
 }); }
@@ -17,9 +19,10 @@ export function cartoonsGet(request: Request) { return run(async () => {
 export function cartoonsPost(request: Request) { return run(async () => {
   mutation(request);
   await authenticated();
-  z.object({}).strict().parse(await body(request, 1000));
+  const input = z.object({ date: editionDate.optional() }).strict().parse(await body(request, 1000));
+  const date = input.date ?? seoulDate();
+  if (date > seoulDate()) throw new HttpError(400, "아직 오지 않은 날짜예요.");
   if (!cartoonsEnabled()) throw new HttpError(503, "하루만평 연결을 준비하고 있어요.");
-  const date = seoulDate();
   if (Date.now() < Date.parse(cartoonAvailableAt(date))) throw new HttpError(409, "오늘의 만평은 저녁 7시 이후에 준비돼요.");
   await enqueueCartoon(date);
   const payload = await cartoonPayload(adminClient(), date);

@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useRef, useState } from "react";
-import { BottomNav, IconNext, ProfileButton, Screen } from "@/components/ui";
-import { longDate, todayKey } from "@/lib/date";
+import { BottomNav, IconNext, ProfileButton, Screen, TopBar } from "@/components/ui";
+import { longDate } from "@/lib/date";
 import { useStore } from "@/lib/store";
 import { useEdition, validCartoonDate as validDate } from "@/lib/cartoon-client";
+import { useJournalToday } from "@/lib/use-journal-today";
 import s from "./cartoon.module.css";
 
 const pending = cartoon => cartoon && ["queued", "processing"].includes(cartoon.status);
@@ -17,14 +18,14 @@ function sourceUrl(value) {
 function timestamp(value) {
   const date = new Date(value);
   return value && Number.isFinite(date.getTime())
-    ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date)
+    ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date)
     : null;
 }
 
 export default function CartoonPage() {
   return (
     <Screen>
-      <Suspense fallback={<div className="loading">오늘의 지면을 펼치고 있어요…</div>}>
+      <Suspense fallback={<div className="loading">만평 지면을 펼치고 있어요…</div>}>
         <CartoonRoute />
       </Suspense>
     </Screen>
@@ -33,22 +34,28 @@ export default function CartoonPage() {
 
 function CartoonRoute() {
   const params = useSearchParams();
-  const date = params.get("date");
+  const today = useJournalToday();
+  const date = params.has("date") ? params.get("date") : today;
   const autoRequested = useRef(new Set());
-  return <Edition key={date || "today"} requestedDate={validDate(date) ? date : null} autoRequested={autoRequested} />;
+  if (!validDate(date) || date > today) return <>
+    <TopBar title="날짜 확인" back="/cartoon" />
+    <div className={s.invalid}><h2>오늘까지의 날짜를 골라 주세요</h2><p>유효한 지난 날짜나 오늘 날짜로 만평을 펼칠 수 있어요.</p><Link href="/cartoon">오늘의 만평으로 돌아가기</Link></div>
+  </>;
+  return <Edition key={date} requestedDate={date} today={today} autoRequested={autoRequested} />;
 }
 
-function Edition({ requestedDate, autoRequested }) {
+function Edition({ requestedDate, today, autoRequested }) {
   const router = useRouter();
   const { db, refresh: refreshPersonal } = useStore();
   const { payload, error, loading, posting, fetchedAt, refresh, start } = useEdition(requestedDate, autoRequested);
   const [mode, setMode] = useState("both");
-  const today = payload?.today ?? todayKey();
-  const date = requestedDate ?? today;
+  const [pickerDate, setPickerDate] = useState(requestedDate);
+  const date = requestedDate;
   const cartoon = payload?.cartoon?.date === date ? payload.cartoon : null;
   const personal = db.artworks[date];
-  const dates = [...new Set([today, date, ...(payload?.dates ?? [])])].filter(validDate).sort().reverse();
-  const canRequest = date === today && payload?.enabled && payload?.canRequest;
+  const dates = [...new Set(payload?.dates ?? [])].filter(day => validDate(day) && day <= today).sort().reverse();
+  const canRequest = date <= today && payload?.enabled && payload?.canRequest;
+  const chooseDate = day => { if (validDate(day) && day <= today) router.replace(`/cartoon?date=${encodeURIComponent(day)}`, { scroll: false }); };
   const sources = (cartoon?.sources ?? []).map(source => ({ ...source, href: sourceUrl(source.url) })).filter(source => source.href);
   const selectedAt = timestamp(cartoon?.selectedAt);
   const comparing = mode === "both";
@@ -66,9 +73,17 @@ function Edition({ requestedDate, autoRequested }) {
           </nav>
           <div className={s.editionRow}>
             <span className={s.editionTag}><i aria-hidden="true" />하루 한 장 · 함께 보는 만평</span>
-            <label className={s.datePicker}><span className="sr-only">만평 날짜</span>
-              <select value={date} onChange={event => router.replace(`/cartoon?date=${encodeURIComponent(event.target.value)}`, { scroll: false })}>
-                {dates.map(day => <option key={day} value={day}>{longDate(day)}{day === today ? " · 오늘" : ""}</option>)}
+            <form className={s.dateForm} onSubmit={event => { event.preventDefault(); chooseDate(pickerDate); }}>
+              <label className={s.datePicker} htmlFor="cartoon-date"><span>만평 날짜</span>
+                <input id="cartoon-date" type="date" min="0001-01-01" max={today} required value={pickerDate} onChange={event => setPickerDate(event.target.value)} />
+              </label>
+              <button type="submit" disabled={!validDate(pickerDate) || pickerDate > today}>이날 보기</button>
+            </form>
+            <p className={s.dateHelp}>지난 날짜도 골라 그날의 뉴스로 만평을 만들 수 있어요. 날짜마다 한 장을 함께 봐요.</p>
+            <label className={s.archivePicker}><span>저장된 만평</span>
+              <select value={dates.includes(date) ? date : ""} onChange={event => chooseDate(event.target.value)}>
+                <option value="" disabled>{dates.length ? "저장된 날짜 선택" : "아직 저장된 만평이 없어요"}</option>
+                {dates.map(day => <option key={day} value={day}>{day.slice(0, 4)}년 {longDate(day)}{day === today ? " · 오늘" : ""}</option>)}
               </select>
             </label>
           </div>
@@ -78,8 +93,8 @@ function Edition({ requestedDate, autoRequested }) {
 
         <section className={s.lead} aria-labelledby="news-title">
           <div className={s.kicker}><span>01 / 세상의 하루</span><span>{date === today ? "오늘의 대표 뉴스" : "이날의 대표 뉴스"}</span></div>
-          <h2 id="news-title">{cartoon?.headline || (loading ? "오늘의 이야기를 불러오는 중" : pending(cartoon) || posting ? "오늘을 담을 한 장면을 찾고 있어요" : "하루를 읽는 또 하나의 시선")}</h2>
-          <p className={s.leadNote}>매일 저녁 7시 이후, 선정 시각까지의 여러 보도를 살펴 대표 뉴스 한 가지를 만평으로 풀어내요.</p>
+          <h2 id="news-title">{cartoon?.headline || (loading ? "이날의 이야기를 불러오는 중" : pending(cartoon) || posting ? "이날을 담을 한 장면을 찾고 있어요" : "하루를 읽는 또 하나의 시선")}</h2>
+          <p className={s.leadNote}>{date === today ? "오늘은 저녁 7시 이후, 선정 시각까지 나온 보도에서 대표 뉴스 한 가지를 골라요." : "선택한 날짜에 나온 보도를 한국 시간 하루 기준으로 살펴 대표 뉴스 한 가지를 만평으로 풀어내요."}</p>
         </section>
 
         <div className={s.viewModes} role="group" aria-label="그림 보기 방식">
@@ -153,9 +168,10 @@ function CartoonStatus({ cartoon, loading, posting, enabled, beforeAvailable, is
   else if (!enabled) { title = "하루만평을 준비하고 있어요"; detail = "새로운 지면이 열리면 이곳에서 만나요."; }
   else if (isToday && beforeAvailable) { title = "저녁 7시 이후에 만나요"; detail = "하루의 보도가 모이면 오늘의 대표 뉴스와 만평을 준비해요."; }
   else if (isToday) { title = "오늘의 지면을 준비해요"; detail = "대표 뉴스 한 가지를 골라 모두가 함께 볼 만평을 만들어요."; }
+  else if (canRequest) { title = "이날의 만평을 만들어 보세요"; detail = "버튼을 누르면 선택한 날짜의 보도에서 대표 뉴스를 찾아 만평을 만들어요."; }
   return <div className={`${s.emptyPicture} ${working ? s.working : ""}`} role="status" aria-live="polite">
     <span className={s.emptyMark} aria-hidden="true">{working ? "◎" : "✳"}</span><strong>{title}</strong><p>{detail}</p>
     {working && <div className={s.progress}><span className={!drawing ? s.currentStep : ""}>뉴스 선정</span><i aria-hidden="true" /><span className={drawing ? s.currentStep : ""}>만평 그리기</span></div>}
-    {!posting && !loading && canRequest && <button onClick={onRequest}>{cartoon ? "다시 시도하기" : "오늘의 만평 준비하기"}</button>}
+    {!posting && !loading && canRequest && <button onClick={onRequest}>{cartoon ? "다시 시도하기" : isToday ? "오늘의 만평 준비하기" : "이날의 만평 준비하기"}</button>}
   </div>;
 }
