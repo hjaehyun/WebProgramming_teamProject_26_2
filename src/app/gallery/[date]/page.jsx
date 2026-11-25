@@ -8,10 +8,12 @@ import Picture from "@/components/Picture";
 import SongCard from "@/components/SongCard";
 import Weather from "@/components/Weather";
 import { IconBack, IconNext, Screen, TopBar } from "@/components/ui";
-import { clock, dateKeyOf, longDate, todayKey } from "@/lib/date";
+import { clock, dateKeyOf, longDate } from "@/lib/date";
 import { generateArtwork } from "@/lib/ai";
 import { downloadImage } from "@/lib/download";
-import { byTime, sortedArtworks, useStore } from "@/lib/store";
+import { byTime, useStore } from "@/lib/store";
+import { shiftJournalDay, validJournalDate } from "@/lib/journal-calendar";
+import { useJournalToday } from "@/lib/use-journal-today";
 import { canChooseExhibitionArtwork } from "@/lib/exhibition-selection";
 import { FRAMES, dayWeathers, frameOf } from "@/lib/frames";
 import { styleOf, withParticle } from "@/lib/styles";
@@ -19,19 +21,25 @@ import s from "./detail.module.css";
 
 export default function DetailPage() {
   const { date } = useParams();
+  const today = useJournalToday();
+  const valid = validJournalDate(date);
+  const future = valid && date > today;
   // Keyed by day: a half-written or half-edited fragment must not follow the 전날/다음날 buttons.
   return (
     <Screen>
-      <Detail key={date} />
+      {valid && !future ? <Detail key={date} date={date} today={today} /> : <>
+        <TopBar title="날짜 확인" back="/gallery" />
+        <div className={s.invalidDay} role="status"><h2>{future ? "아직 오지 않은 날이에요" : "날짜를 확인해 주세요"}</h2><p>{future ? "오늘까지의 하루를 골라 기록할 수 있어요." : "달력에서 기록할 날짜를 다시 골라 주세요."}</p><Link className="btn ghost" href="/gallery">달력으로 돌아가기</Link></div>
+      </>}
     </Screen>
   );
 }
 
-function Detail() {
-  const { date } = useParams();
+function Detail({ date, today }) {
   const router = useRouter();
   const { db, toggleExhibit, applyArtwork, requestSong, voteSong, refresh, exhibitionSaving, addEntry, editEntry, removeEntry, flushEntries, setFrame } = useStore();
   const art = db.artworks[date];
+  const entries = [...(art?.entries ?? db.drafts[date] ?? [])].sort(byTime);
   const [saving, setSaving] = useState(false);
   const [redrawing, setRedrawing] = useState(false);
   const [openId, setOpenId] = useState(null); // fragment showing 수정/지우기
@@ -69,37 +77,53 @@ function Detail() {
     }
   }
 
-  /** "다시 그리기": the day's current fragments, summarized and drawn again in the current profile style. */
+  /** Save the input first, then wait for every fragment write before drawing this day's snapshot. */
   async function redraw() {
-    if (!art || redrawing || removing) return;
-    const style = db.profile?.style ?? art.style;
-    const ok = confirm(
-      `${withParticle(style)} ${art.status === "failed" ? "다시 시도할까요?" : "다시 그릴까요?"}\n${art.entriesChanged ? "지금의 조각으로 새로 그려요. " : ""}이날 그림은 실패를 포함해 총 3회까지 생성할 수 있어요. 새 그림이 완성되면 바뀝니다.`,
-    );
-    if (!ok) return;
-    cancelEdit();
+    if (redrawing || removing || (art && !art.canRetry) || (!entries.length && !draft.trim()) || (editingId && !draft.trim())) return;
+    const style = db.profile?.style ?? art?.style;
+    if (art && !confirm(
+      `${withParticle(style)} ${art.status === "failed" ? "다시 시도할까요?" : "다시 그릴까요?"}\n${draft.trim() ? "입력 중인 조각을 먼저 저장해요. " : art.entriesChanged ? "지금의 조각으로 새로 그려요. " : ""}이날 그림은 실패를 포함해 총 3회까지 생성할 수 있어요. 새 그림이 완성되면 바뀝니다.`,
+    )) return;
     setOpenId(null);
     setRedrawing(true);
+    let submitted = null;
     try {
+      const text = draft.trim();
+      if (text) {
+        if (editingId) {
+          const old = entries.find(entry => entry.id === editingId);
+          if (!old) throw new Error("수정 중인 조각을 찾지 못했어요. 기록을 다시 확인해 주세요.");
+          if (old.text !== text) editEntry(date, editingId, text);
+          submitted = { id: editingId, text };
+        } else {
+          const added = addEntry(date, text);
+          submitted = { id: added.id, text };
+        }
+      }
       await flushEntries(); // fragment changes still being saved must reach the server before it re-reads them
-      await generateArtwork(date, art.status === "ready", applyArtwork);
+      cancelEdit();
+      await generateArtwork(date, art?.status === "ready", applyArtwork);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "다시 그리지 못했어요");
+      alert(err instanceof Error ? err.message : "그림을 그리지 못했어요");
     } finally {
-      await refresh();
+      const latest = await refresh();
+      // If another pending write failed, this input may still have saved successfully.
+      // Clear it only when the server confirms it, so a retry neither loses nor duplicates it.
+      const saved = latest?.artworks?.[date]?.entries ?? latest?.drafts?.[date] ?? [];
+      if (submitted && saved.some(entry => entry.id === submitted.id && entry.text === submitted.text)) cancelEdit();
       setRedrawing(false);
     }
   }
 
-  // Fragments of a finished (or failed) day can change; not while its picture is being drawn.
-  const editable = !!art && ["ready", "failed"].includes(art.status) && !redrawing && !removing;
+  // A valid unpictured day can be written too; a queued or processing picture stays locked.
+  const editable = (!art || ["ready", "failed"].includes(art.status)) && !redrawing && !removing;
 
   function submit() {
     const text = draft.trim();
     if (!text || !editable) return;
     if (editingId) {
       // Only send when the text really changed.
-      const old = art.entries.find((e) => e.id === editingId);
+      const old = entries.find((e) => e.id === editingId);
       if (old && old.text !== text) editEntry(date, editingId, text);
       cancelEdit();
       return;
@@ -124,7 +148,7 @@ function Detail() {
   async function remove(e) {
     setOpenId(null);
     if (e.id === editingId) cancelEdit();
-    if (art.entries.length > 1) {
+    if (!art || entries.length > 1) {
       removeEntry(date, e.id);
       return;
     }
@@ -133,9 +157,11 @@ function Detail() {
     setRemoving(true);
     try {
       await removeEntry(date, e.id);
-      router.replace(date === todayKey() ? "/today" : "/gallery");
+      await refresh();
     } catch {
-      setRemoving(false); // the store already showed the error and reloaded the day
+      // The store already showed the error and reloaded the day.
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -151,34 +177,23 @@ function Detail() {
     }
   }
 
-  if (!art) {
-    return (
-      <>
-        <TopBar title={longDate(date)} back="/gallery" />
-        <div className="loading">이날은 그림이 없어요.</div>
-      </>
-    );
-  }
-
-  // Newest first, so "previous day" is the next index.
-  const list = sortedArtworks(db);
-  const i = list.findIndex((w) => w.date === date);
-  const older = list[i + 1]?.date;
-  const newer = list[i - 1]?.date;
+  const older = shiftJournalDay(date, -1);
+  const newer = date < today ? shiftJournalDay(date, 1) : null;
   const inShow = db.exhibition.dates.includes(date);
 
   return (
     <>
-      <TopBar title={longDate(date)} back="/gallery">
-        <button className="icon-btn" aria-label="전날 그림" disabled={!older} onClick={() => older && router.replace(`/gallery/${older}`)}>
+      <TopBar title={`${Number(date.slice(0, 4))}년 ${longDate(date)}`} back={`/gallery?month=${date.slice(0, 7)}`}>
+        <button className="icon-btn" aria-label="전날 기록" disabled={!older} onClick={() => older && router.replace(`/gallery/${older}`)}>
           <IconBack />
         </button>
-        <button className="icon-btn" aria-label="다음날 그림" disabled={!newer} onClick={() => newer && router.replace(`/gallery/${newer}`)}>
+        <button className="icon-btn" aria-label="다음날 기록" disabled={!newer} onClick={() => newer && router.replace(`/gallery/${newer}`)}>
           <IconNext />
         </button>
       </TopBar>
 
       <main className={`scroll ${s.main}`}>
+        {art ? <>
         <figure className={s.figure} aria-busy={redrawing}>
           <Framed frame={art.frame} date={date} summary={art.summary} weathers={dayWeathers(art.entries)} basicClassName={s.frame}>
             <Picture scene={art.scene} imageUrl={art.imageUrl} imageError={art.imageError} alt={art.summary} />
@@ -214,12 +229,17 @@ function Detail() {
             </div>
           )}
         </section>
+        </> : <section className={s.emptyDay} aria-live="polite">
+          <span aria-hidden="true">✦</span><h2 className="hand">{redrawing ? "이날의 그림을 준비하고 있어요" : "기억나는 하루를 채워보세요"}</h2>
+          <p>{redrawing ? "조각을 모아 한 장면으로 그려드릴게요." : "조각글을 남기고, 원할 때 한 장의 그림으로 완성해 보세요."}</p>
+          {!redrawing && <small>그림이 없어도 조각글은 그대로 저장돼요.</small>}
+        </section>}
 
         <Link href={`/cartoon?date=${encodeURIComponent(date)}`} className={s.cartoonLink}>
           <span><small>같은 날, 다른 시선</small><strong>이날의 만평과 나란히 보기</strong></span><IconNext />
         </Link>
 
-        <SongCard
+        {art && <SongCard
           available={!!db.capabilities?.music}
           song={art.song}
           busy={songBusy || redrawing}
@@ -228,18 +248,18 @@ function Detail() {
           onRequest={() => song(false)}
           onReroll={() => song(true)}
           onLike={() => art.song && like(art.song.id)}
-        />
+        />}
 
         <section className={s.entries}>
-          <h2>그날의 조각 {art.entries.length}개</h2>
-          {art.entriesChanged && ["ready", "failed"].includes(art.status) && (
+          <h2>그날의 조각 {entries.length}개</h2>
+          {art?.entriesChanged && ["ready", "failed"].includes(art.status) && (
             <p className={s.changed} role="status">
               {art.canRetry
                 ? `조각이 바뀌었어요. 다시 그리면 지금의 조각으로 새 그림을 그려요. (남은 횟수 ${3 - art.attempts}회)`
                 : "조각이 바뀌었어요. 이날 그림은 3회를 모두 그려서 그림은 그대로 남아요."}
             </p>
           )}
-          {[...art.entries].sort(byTime).map((e) => {
+          {entries.map((e) => {
             const t = clock(e.at);
             // Added on a later day: the clock time alone would read as a time of this day.
             const [, m, d] = dateKeyOf(e.at).split("-");
@@ -295,7 +315,7 @@ function Detail() {
                     if (e.key === "Enter" && !e.nativeEvent.isComposing) submit();
                     if (e.key === "Escape" && editingId) cancelEdit();
                   }}
-                  placeholder={editingId ? "고칠 내용을 한 줄로…" : "이날의 조각을 더해 보세요"}
+                  placeholder={editingId ? "고칠 내용을 한 줄로…" : "이날 기억나는 순간을 한 줄로…"}
                   maxLength={140}
                 />
                 <button className={s.send} onClick={submit} disabled={!draft.trim()} aria-label={editingId ? "수정 저장" : "조각 더하기"}>
@@ -310,6 +330,7 @@ function Detail() {
       </main>
 
       <div className={`bar ${s.actions}`}>
+        {art ? <>
         <button className={s.download} aria-label="그림 저장" title="그림 저장" onClick={download} disabled={saving || redrawing || !art.imageUrl}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
@@ -318,14 +339,17 @@ function Detail() {
         <button
           className="btn ghost"
           onClick={redraw}
-          disabled={redrawing || removing || !art.canRetry || art.entries.length === 0}
-          title={art.entries.length === 0 ? "조각이 없는 날은 다시 그릴 수 없어요" : undefined}
+          disabled={redrawing || removing || !art.canRetry || (!entries.length && !draft.trim()) || !!(editingId && !draft.trim())}
+          title={!entries.length && !draft.trim() ? "조각을 남기면 그림을 그릴 수 있어요" : undefined}
         >
           {redrawing ? "그리는 중…" : art.status === "failed" ? "다시 시도" : "다시 그리기"}
         </button>
         <button className={inShow ? "btn ghost" : "btn"} onClick={() => toggleExhibit(date)} disabled={exhibitionSaving || (redrawing && !inShow) || !canChooseExhibitionArtwork(art, db.exhibition.dates)}>
           {inShow ? "전시회에서 내리기" : "전시회에 걸기"}
         </button>
+        </> : <button className="btn" onClick={redraw} disabled={redrawing || removing || (!entries.length && !draft.trim()) || !!(editingId && !draft.trim())}>
+          {redrawing ? "그림을 준비하는 중…" : draft.trim() ? "조각 저장하고 그림 그리기" : "이날의 그림 그리기"}
+        </button>}
       </div>
     </>
   );

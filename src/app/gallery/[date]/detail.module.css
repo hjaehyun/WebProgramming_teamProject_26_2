@@ -49,3 +49,12 @@
 .cartoonLink small { font-size: 10px; color: #994B37; }
 .cartoonLink strong { font-size: 13px; }
 .cartoonLink > svg { flex-shrink: 0; }
+
+.emptyDay { padding: 24px 18px; border: 1px dashed #D8D0C1; border-radius: 16px; background: #F4F0E7; text-align: center; }
+.emptyDay > span { display: block; color: #B09B76; font-size: 30px; }
+.emptyDay h2 { margin: 10px 0 8px; font-size: 26px; line-height: 1.2; }
+.emptyDay p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.75; word-break: keep-all; }
+.emptyDay small { display: block; margin-top: 10px; color: #8B8070; font-size: 11px; line-height: 1.6; }
+.invalidDay { padding: 32px 24px; text-align: center; }
+.invalidDay h2 { margin: 0 0 12px; font-size: 20px; }
+.invalidDay p { margin: 0 0 24px; color: var(--muted); font-size: 14px; line-height: 1.7; }

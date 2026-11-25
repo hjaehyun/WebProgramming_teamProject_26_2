@@ -1,8 +1,14 @@
 .main { padding: 28px 16px 20px; display: flex; flex-direction: column; gap: 16px; }
-.monthHead { padding: 0 8px; display: flex; align-items: center; justify-content: space-between; }
-.monthHead h1 { margin: 0; font-size: 34px; font-weight: 700; }
+.monthHead { padding: 0 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+.monthHead h1 { margin: 0; font-size: 30px; font-weight: 700; }
 .monthNav { display: flex; gap: 4px; }
 .stats { padding: 0 8px; font-size: 13px; color: var(--muted); }
+.monthControls { display: flex; align-items: flex-end; gap: 10px; padding: 0 8px; }
+.monthPicker { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--muted); }
+.monthPicker input { width: 100%; min-width: 0; min-height: 42px; border: 1px solid var(--line-2); border-radius: 10px; padding: 5px 10px; color: var(--ink); background: var(--surface); font-size: 14px; }
+.monthControls button { min-height: 42px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 12px; cursor: pointer; }
+.monthControls button:disabled { color: var(--faint); background: var(--soft); cursor: default; }
+.calendarHint { margin: -7px 0 0; padding: 0 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 
 .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .wd { height: 24px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--muted); }
@@ -13,10 +19,15 @@
   background: rgba(255, 255, 255, 0.88); font-size: 10px; font-weight: 700; color: var(--ink);
   display: flex; align-items: center; justify-content: center;
 }
-.empty, .future { aspect-ratio: 1; border-radius: 8px; position: relative; font-size: 10px; }
-.empty { background: #F0ECE5; color: var(--muted); }
+.empty, .future, .draftDay { aspect-ratio: 1; border-radius: 8px; position: relative; font-size: 10px; }
+.empty { display: block; background: #F0ECE5; color: var(--muted); text-decoration: none; }
 .future { border: 1px solid #ECE7DF; color: var(--faint); }
-.empty span, .future span { position: absolute; left: 6px; top: 4px; }
+.future span, .dayNumber { position: absolute; left: 5px; top: 3px; }
+.dayNote { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: 9px; }
+.empty .dayNote { bottom: 2px; font-size: 17px; line-height: 1; color: #AAA293; }
+.draftDay { display: block; background: var(--accent-soft); border: 1px solid #C9CFED; color: var(--accent-ink); text-decoration: none; }
+.empty:hover, .draftDay:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.grid a:focus-visible, .monthControls button:focus-visible, .monthPicker input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .today {
   aspect-ratio: 1; border-radius: 8px; border: 2px dashed var(--accent); position: relative;
   display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px;

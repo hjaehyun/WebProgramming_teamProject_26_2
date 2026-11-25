@@ -1,72 +1,67 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Picture from "@/components/Picture";
 import { BottomNav, IconBack, IconNext, ProfileButton, Screen } from "@/components/ui";
-import { monthDay, toKey, todayKey, fromKey, WEEKDAY_NAMES } from "@/lib/date";
+import { monthDay, WEEKDAY_NAMES } from "@/lib/date";
 import { sortedArtworks, useStore } from "@/lib/store";
+import { buildJournalMonth, journalMonth, journalMonthStats, shiftJournalMonth, validJournalMonth } from "@/lib/journal-calendar";
+import { useJournalToday } from "@/lib/use-journal-today";
 import s from "./gallery.module.css";
 
 export default function GalleryPage() {
   return (
     <Screen>
-      <Gallery />
+      <Suspense fallback={<div className="loading">달력을 불러오고 있어요…</div>}><GalleryRoute /></Suspense>
     </Screen>
   );
 }
 
-function buildMonth(db, year, month) {
-  const today = todayKey();
-  const lead = new Date(year, month, 1).getDay();
-  const days = new Date(year, month + 1, 0).getDate();
-  const cells = [];
-  for (let i = 0; i < lead; i++) cells.push({ kind: "blank", key: `b${i}` });
-  for (let d = 1; d <= days; d++) {
-    const key = toKey(new Date(year, month, d));
-    const kind = db.artworks[key] ? "art" : key === today ? "today" : key > today ? "future" : "empty";
-    cells.push({ kind, key, day: d });
-  }
-  return cells;
+function GalleryRoute() {
+  const params = useSearchParams();
+  const today = useJournalToday();
+  return <Gallery month={journalMonth(params.get("month"), today)} today={today} />;
 }
 
-function Gallery() {
+function Gallery({ month, today }) {
+  const router = useRouter();
   const { db } = useStore();
-  const now = fromKey(todayKey());
+  const thisMonth = today.slice(0, 7);
+  const [year, monthNumber] = month.split("-").map(Number);
   const works = sortedArtworks(db);
-  const oldest = works.length ? works[works.length - 1].date : todayKey();
-  const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
-
-  const first = { y: Number(oldest.slice(0, 4)), m: Number(oldest.slice(5, 7)) - 1 };
-  const atFirst = ym.y === first.y && ym.m === first.m;
-  const atLast = ym.y === now.getFullYear() && ym.m === now.getMonth();
-  const shift = (n) => setYm(({ y, m }) => ({ y: y + Math.floor((m + n) / 12), m: (m + n + 12) % 12 }));
-
-  const cells = buildMonth(db, ym.y, ym.m);
-  const prefix = `${ym.y}-${String(ym.m + 1).padStart(2, "0")}`;
-  const monthWorks = works.filter((w) => w.date.startsWith(prefix));
-  const fragCount = monthWorks.reduce((n, w) => n + w.entries.length, 0);
+  const previous = shiftJournalMonth(month, -1);
+  const next = shiftJournalMonth(month, 1);
+  const chooseMonth = value => {
+    if (validJournalMonth(value) && value <= thisMonth) router.replace(`/gallery?month=${value}`, { scroll: false });
+  };
+  const cells = buildJournalMonth(db, month, today);
+  const stats = journalMonthStats(db, month);
 
   return (
     <>
       <main className={`scroll ${s.main}`}>
         <div className={s.monthHead}>
           <h1 className="hand">
-            {ym.y}년 {ym.m + 1}월
+            {year}년 {monthNumber}월
           </h1>
           <div className={s.monthNav}>
-            <button className="icon-btn" aria-label="이전 달" onClick={() => shift(-1)} disabled={atFirst}>
+            <button className="icon-btn" aria-label="이전 달" onClick={() => chooseMonth(previous)} disabled={!previous}>
               <IconBack />
             </button>
-            <button className="icon-btn" aria-label="다음 달" onClick={() => shift(1)} disabled={atLast}>
+            <button className="icon-btn" aria-label="다음 달" onClick={() => chooseMonth(next)} disabled={!next || next > thisMonth}>
               <IconNext />
             </button>
             <ProfileButton />
           </div>
         </div>
-        <div className={s.stats}>
-          이번 달 그림 {monthWorks.length}장 · 조각글 {fragCount}개
+        <div className={s.monthControls}>
+          <label className={s.monthPicker}>월 선택<input type="month" value={month} min="0001-01" max={thisMonth} onChange={event => chooseMonth(event.target.value)} /></label>
+          <button type="button" onClick={() => chooseMonth(thisMonth)} disabled={month === thisMonth}>이번 달</button>
         </div>
+        <div className={s.stats}>{month === thisMonth ? "이번 달" : "이달"} 그림 {stats.artworkCount}장 · 조각글 {stats.entryCount}개</div>
+        <p className={s.calendarHint}>빈 날짜를 눌러 지난 하루도 기록해 보세요.</p>
 
         <div className={s.grid}>
           {WEEKDAY_NAMES.map((w) => (
@@ -85,16 +80,16 @@ function Gallery() {
               );
             if (c.kind === "today")
               return (
-                <Link key={c.key} href="/today" className={s.today} aria-label="오늘, 아직 그리는 중">
+                <Link key={c.key} href="/today" className={s.today} aria-label={`오늘 기록하기, 조각글 ${c.entryCount}개`}>
                   <span className={s.todayNum}>{c.day}</span>
-                  <span>오늘</span>
+                  <span>{c.entryCount ? `${c.entryCount}조각` : "오늘"}</span>
                 </Link>
               );
-            return (
-              <div key={c.key} className={c.kind === "empty" ? s.empty : s.future}>
-                <span>{c.day}</span>
-              </div>
-            );
+            if (c.kind === "future") return <div key={c.key} className={s.future} aria-label={`${monthDay(c.key)}, 아직 오지 않은 날`}><span>{c.day}</span></div>;
+            return <Link key={c.key} href={`/gallery/${c.key}`} className={c.kind === "draft" ? s.draftDay : s.empty} aria-label={`${monthDay(c.key)} ${c.entryCount ? `조각글 ${c.entryCount}개 이어 쓰기` : "기록하기"}`}>
+              <span className={s.dayNumber}>{c.day}</span>
+              <span className={s.dayNote}>{c.entryCount ? `${c.entryCount}조각` : "+"}</span>
+            </Link>;
           })}
         </div>
 
@@ -107,7 +102,7 @@ function Gallery() {
           </span>
           <span className={s.curatorText}>
             <span>AI 큐레이터</span>
-            <strong>{ym.m + 1}월의 그림 해설 보기</strong>
+            <strong>모아 둔 그림의 해설 보기</strong>
           </span>
           <IconNext />
         </Link>

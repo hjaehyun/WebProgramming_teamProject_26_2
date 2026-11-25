@@ -101,7 +101,7 @@ function Edition({ requestedDate, autoRequested }) {
               <span className={s.emptyMark} aria-hidden="true">✦</span>
               <strong>{pending(personal) ? "내 그림을 그리고 있어요" : personal?.status === "failed" ? "내 그림을 완성하지 못했어요" : "아직 나의 그림이 없어요"}</strong>
               <p>{personal ? "갤러리에서 그림 상태를 확인해 주세요." : "이날의 작은 순간도 한 장의 그림으로 남겨보세요."}</p>
-              <Link href={personal ? `/gallery/${date}` : date === today ? "/today" : "/gallery"}>{personal ? "그림 확인하기" : date === today ? "오늘 기록하기" : "갤러리 보기"}<IconNext /></Link>
+              <Link href={date === today && !personal ? "/today" : `/gallery/${date}`}>{personal ? "그림 확인하기" : date === today ? "오늘 기록하기" : "이날 기록하기"}<IconNext /></Link>
             </div>}
             <figcaption>{longDate(date)}<span>내가 남긴 순간의 기록</span></figcaption>
             {personal?.status === "ready" && <Link className={s.personalLink} href={`/gallery/${date}`}>내 그림 자세히 보기 <IconNext /></Link>}

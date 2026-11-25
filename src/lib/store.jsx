@@ -158,7 +158,7 @@ export function StoreProvider({ children }) {
         newSession(); setDb(createEmpty()); setAuthed(false); setError(null);
       },
       setProfile: async p => { await trackWrite(() => api("PUT", "/api/me/profile", p)); updateThisSession(d => ({ ...d, profile: p })); },
-      /** Today, or a past day that already has a picture. */
+      /** Today or any past day; a day without a picture keeps its entries in drafts. */
       addEntry: (date, text) => {
         const entry = { id: crypto.randomUUID(), at: new Date().toISOString(), text };
         update(d => withEntries(d, date, list => [...list, entry]));

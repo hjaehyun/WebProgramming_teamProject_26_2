@@ -3,12 +3,15 @@ const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 export function toKey(d) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
+  return `${String(d.getFullYear()).padStart(4, "0")}-${m}-${day}`;
 }
 
 export function fromKey(key) {
   const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  const date = new Date(0);
+  date.setHours(0, 0, 0, 0);
+  date.setFullYear(y, m - 1, d);
+  return date;
 }
 
 /** Seoul calendar day of a timestamp: "2026-11-20". */

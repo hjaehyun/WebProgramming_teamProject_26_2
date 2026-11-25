@@ -99,6 +99,23 @@ describe("authenticated API boundaries",()=>{
     expect(f.db.rpc).toHaveBeenCalledWith("save_team_entry",{p_id:entryId,p_content:"산책",p_date:date});
     expect(await r.json()).toEqual({entry:{id:entryId,text:"산책",at:"2026-11-11T01:00:00Z",weather:null}});
   });
+  test.each(["2026-02-30","2026-11-9","not-a-date",null])("invalid entry and generation dates %s are rejected before RPC or AI work",async invalidDate=>{
+    expect((await entryPost(request("/api/me/entries",{date:invalidDate,entry:{id:entryId,text:"지난 기록"}}))).status).toBe(400);
+    expect((await artworkPost(request("/api/artworks",{date:invalidDate,requestId}))).status).toBe(400);
+    expect(f.db.rpc).not.toHaveBeenCalled();expect(mocks.processOne).not.toHaveBeenCalled();
+  });
+  test.each(["entry","artwork"])("the database's future-date refusal reaches the %s caller without starting AI work",async kind=>{
+    const tomorrow=new Date(Date.now()+33*60*60*1000).toISOString().slice(0,10);
+    const message="오늘이나 지난 날만 사용할 수 있어요.";
+    // This checks the HTTP mapping; actual future-date enforcement is exercised by the PGlite tests.
+    f.db.rpc.mockResolvedValueOnce({data:null,error:{code:"P0001",message}} as never);
+    const response=kind==="entry"
+      ? await entryPost(request("/api/me/entries",{date:tomorrow,entry:{id:entryId,text:"미래 기록"}}))
+      : await artworkPost(request("/api/artworks",{date:tomorrow,requestId}));
+    expect(response.status).toBe(409);expect(await response.json()).toEqual({error:message});
+    expect(f.db.rpc).toHaveBeenCalledWith(kind==="entry"?"save_team_entry":"request_team_artwork",expect.objectContaining({p_date:tomorrow}));
+    expect(mocks.processOne).not.toHaveBeenCalled();
+  });
   test("profile requires explicit AI consent and maps frontend style",async()=>{
     const input={nick:"나",style:"crayon"};
     expect((await profilePut(request("/api/me/profile",input))).status).toBe(400);
@@ -137,6 +154,60 @@ describe("authenticated API boundaries",()=>{
     f.tables.exhibitions=[];
     const response=await me();const data=await response.json();
     expect(Object.keys(data.artworks)).toHaveLength(1001);expect(data.artworks["saved-day-1000"].entries).toHaveLength(1);expect(data.drafts).toEqual({});
+  });
+  test("past drafts stay on their selected date even when written today, and only owner-filtered records are returned",async()=>{
+    const pastDay="2026-11-09",otherPastDay="2026-11-10";
+    const writtenNow=new Date().toISOString();
+    const today=new Date(Date.now()+9*60*60*1000).toISOString().slice(0,10);
+    f.tables.entries.push(
+      {id:"past-original",user_id:alice,entry_date:pastDay,content:"그날 남긴 기록",created_at:"2026-11-09T00:00:00Z"},
+      {id:"past-added-today",user_id:alice,entry_date:pastDay,content:"오늘 떠올린 지난 기록",created_at:writtenNow},
+      {id:"another-past",user_id:alice,entry_date:otherPastDay,content:"다른 지난 날",created_at:writtenNow},
+      {id:"today-draft",user_id:alice,entry_date:today,content:"오늘 기록",created_at:writtenNow},
+      {id:"foreign-past",user_id:bob,entry_date:pastDay,content:"타인의 지난 기록",created_at:writtenNow},
+    );
+    const response=await me();expect(response.status).toBe(200);
+    const data=await response.json();
+    expect(Object.keys(data.drafts).sort()).toEqual([pastDay,otherPastDay,today].sort());
+    expect(data.drafts[pastDay]).toEqual([
+      {id:"past-original",text:"그날 남긴 기록",at:"2026-11-09T00:00:00Z",weather:null},
+      {id:"past-added-today",text:"오늘 떠올린 지난 기록",at:writtenNow,weather:null},
+    ]);
+    expect(data.drafts[today].map((entry:Row)=>entry.id)).toEqual(["today-draft"]);
+    expect(data.drafts[date]).toBeUndefined();expect(data.artworks[date].entries.map((entry:Row)=>entry.id)).toEqual([entryId]);
+    expect(JSON.stringify(data)).not.toContain("타인의 지난 기록");
+    // The fixture emulates explicit filters, not RLS. Database ownership tests cover the latter.
+    for(const query of f.queries.filter(q=>["entries","daily_artworks"].includes(q.table))) expect(query.filters).toContainEqual(["user_id",alice]);
+    for(const [paths] of f.bucket.createSignedUrls.mock.calls) expect(paths.every(path=>path.startsWith(`${alice}/`))).toBe(true);
+  });
+  test("a past day's first generation moves its drafts into that artwork while leaving other dates alone",async()=>{
+    const pastDay="2026-11-09",untouchedDay="2026-11-10";
+    const pastArtId="00000000-0000-4000-8000-000000000090";
+    f.tables.entries.push(
+      {id:"past-a",user_id:alice,entry_date:pastDay,content:"지나간 산책",created_at:"2026-11-25T01:00:00Z"},
+      {id:"past-b",user_id:alice,entry_date:pastDay,content:"떠오른 풍경",created_at:"2026-11-25T02:00:00Z"},
+      {id:"untouched",user_id:alice,entry_date:untouchedDay,content:"다른 날의 기록",created_at:"2026-11-25T03:00:00Z"},
+      {id:"foreign-past",user_id:bob,entry_date:pastDay,content:"다른 사람 기록",created_at:"2026-11-25T01:00:00Z"},
+    );
+    const before=await (await me()).json();
+    expect(before.drafts[pastDay]).toHaveLength(2);expect(before.artworks[pastDay]).toBeUndefined();
+    // Model the committed RPC and worker result; the SQL tests verify creation and attempt accounting.
+    const newArtwork={...f.tables.daily_artworks[0],id:pastArtId,artwork_date:pastDay,status:"queued",image_path:null,attempts:0};
+    f.db.rpc.mockImplementationOnce(async()=>{f.tables.daily_artworks.push(newArtwork);return {data:pastArtId,error:null};});
+    mocks.processOne.mockImplementationOnce(async()=>{
+      Object.assign(newArtwork,{status:"ready",attempts:1,image_path:`${alice}/${pastArtId}/first.png`});
+      return {processed:true,status:"ready"};
+    });
+    const generated=await artworkPost(request("/api/artworks",{date:pastDay,redraw:false,requestId}));
+    expect(generated.status).toBe(200);
+    expect(f.db.rpc).toHaveBeenCalledWith("request_team_artwork",{p_date:pastDay,p_redraw:false,p_request_id:requestId});
+    expect(mocks.processOne).toHaveBeenCalledWith(pastArtId);
+    const artwork=(await generated.json()).artwork;
+    expect(artwork.date).toBe(pastDay);expect(artwork.entries.map((entry:Row)=>entry.id)).toEqual(["past-a","past-b"]);
+    const after=await (await me()).json();
+    expect(after.drafts[pastDay]).toBeUndefined();expect(after.artworks[pastDay].entries).toEqual(before.drafts[pastDay]);
+    expect(after.drafts[untouchedDay]).toEqual(before.drafts[untouchedDay]);
+    expect(after.artworks[date]).toEqual(before.artworks[date]);
   });
   test("a picture reports whether its fragments changed since drawing, without exposing the snapshot",async()=>{
     f.tables.daily_artworks[0].entry_snapshot=[{content:"내 기록",created_at:"2026-11-11T00:00:00+00:00"}];
