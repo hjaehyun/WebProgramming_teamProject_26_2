@@ -43,7 +43,7 @@ function Guide() {
     },
     {
       title: "마감하면 그림 한 장",
-      body: `'오늘 마감하고 그림 그리기'를 누르면 그날 모은 조각들이 ${style.label} 그림 한 장이 돼요. 마감한 날에는 조각을 더할 수 없어요.`,
+      body: `'오늘 마감하고 그림 그리기'를 누르면 그날 모은 조각들이 ${style.label} 그림 한 장이 돼요. 그림이 완성된 뒤에도 조각을 고치거나 더할 수 있고, 바뀐 내용을 그림에 담으려면 다시 그리기를 눌러주세요.`,
       art: (
         <div className={s.merge}>
           <div className={s.pieces} aria-hidden="true">
@@ -62,7 +62,7 @@ function Guide() {
     },
     {
       title: "달력에 차곡차곡",
-      body: "갤러리 달력에 하루 한 장씩 쌓여요. 날짜를 누르면 그날 그림과 쓴 조각을 함께 볼 수 있어요.",
+      body: "갤러리 달력에서 날짜를 누르면 그날 그림과 조각을 함께 볼 수 있어요. 그림이 없는 지난 날짜도 눌러 기록하고 그림을 만들 수 있어요.",
       art: (
         <div className={s.calendar} aria-hidden="true">
           {CALENDAR.map((scene, n) => (

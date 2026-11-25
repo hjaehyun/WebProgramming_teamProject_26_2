@@ -5,6 +5,7 @@ import { accountInfo } from "./oauth";
 import { weatherEnabled } from "./weather";
 import { musicEnabled } from "./music";
 import { entriesChanged } from "./core/domain";
+import { artProfileView } from "./core/art-profile";
 
 export type Row = Record<string, any>;
 // entry_snapshot is read only to compute entriesChanged; it never goes into a response.
@@ -84,8 +85,9 @@ async function allArtworks(db: SupabaseClient, userId: string) {
   }
 }
 export async function dashboard(db: SupabaseClient, user: User, profile: Row) {
-  const account = { email:user.email??"", joinedAt:user.created_at, ...accountInfo(user.identities) };
-  const profileInfo = { nick:profile.nickname,style:toStyle(profile.art_style),consent:!!profile.ai_consent_at };
+  const account = { id:user.id,email:user.email??"", joinedAt:user.created_at, ...accountInfo(user.identities) };
+  const profileInfo = { nick:profile.nickname,style:toStyle(profile.art_style),consent:!!profile.ai_consent_at,
+    artProfile:artProfileView(profile.art_profile),artProfileEnabled:!!profile.art_profile_enabled && !!profile.ai_consent_at };
   if (profile.deleting_at) return {
     account,profile:profileInfo,deletionPending:true,drafts:{},artworks:{},
     exhibition:{id:"",title:"나의 하루조각",desc:"",isPublic:false,dates:[]},capabilities:{weather:false,music:false},

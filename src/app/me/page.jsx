@@ -48,6 +48,13 @@ function Me() {
   const router = useRouter();
   const { db, signOut } = useStore();
   const profile = db.profile;
+  const details = profile.artProfile;
+  const hasDetails = Boolean(
+    (details?.gender && details.gender !== "unspecified") ||
+    (details?.ageRange && details.ageRange !== "unspecified") ||
+    details?.occupation?.trim() || details?.appearance?.trim()
+  );
+  const artProfileStatus = !hasDetails ? "입력 전" : profile.consent && profile.artProfileEnabled ? "새 그림에 반영" : "반영 꺼짐";
   const style = styleOf(profile.style);
   const [open, setOpen] = useState(null);
   const social = db.account?.kind === "social";
@@ -121,6 +128,11 @@ function Me() {
         </section>
 
         <nav className={s.list} aria-label="바로가기">
+          <Link href="/profile?step=details" className={s.row}>
+            <span>그림 속 내 모습</span>
+            <span className={s.meta}>{artProfileStatus}</span>
+            <IconNext />
+          </Link>
           <Link href="/exhibition" className={s.row}>
             <span>내 전시회</span>
             <span className={s.meta}>

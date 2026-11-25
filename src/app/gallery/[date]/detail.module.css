@@ -1,3 +1,4 @@
+.detail { display: contents; }
 .main { padding: 8px 16px 20px; display: flex; flex-direction: column; gap: 18px; }
 .figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .frame { border-radius: 16px; overflow: hidden; display: block; box-shadow: 0 6px 20px rgba(35, 33, 29, 0.10); }
@@ -35,6 +36,8 @@
 .del { color: var(--danger); border-color: #EBC8C4; }
 .changed { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--accent-tint); color: var(--accent-ink); font-size: 13px; line-height: 1.5; }
 .composer { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.draftHint, .saveError { margin: 0; padding: 0 6px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.saveError { color: var(--danger); }
 .editBar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 12px; background: var(--accent-tint); color: var(--accent-ink); font-size: 12px; }
 .editBar button { height: 28px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); font-size: 12px; cursor: pointer; }
 .inputRow { display: flex; gap: 8px; align-items: center; }
@@ -43,3 +46,26 @@
 .send:disabled { background: var(--line-2); cursor: default; }
 .actions { display: flex; gap: 8px; }
 .download { width: 52px; height: 52px; flex-shrink: 0; border: 1px solid var(--line-2); border-radius: 26px; background: var(--surface); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+.cartoonLink { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 16px; border: 1px solid #D7D0C0; border-top: 3px double #746C5A; border-radius: 3px; background: #F5F0E4; color: #413B2F; text-decoration: none; }
+.cartoonLink > span { display: flex; flex-direction: column; gap: 5px; }
+.cartoonLink small { font-size: 10px; color: #994B37; }
+.cartoonLink strong { font-size: 13px; }
+.cartoonLink > svg { flex-shrink: 0; }
+.connectionLink { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 16px; border: 1px solid #ced5e5; border-radius: 10px; background: #f0f3fa; color: #3c4c70; text-align: left; cursor: pointer; }
+.connectionLink > span { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
+.connectionLink small { color: #7180a2; font-size: 10px; }
+.connectionLink strong { font-size: 13px; }
+.connectionLink > span > span { color: #7b859b; font-size: 10px; line-height: 1.7; }
+.connectionLink > svg { flex-shrink: 0; }
+.connectionLink:disabled { opacity: .6; cursor: default; }
+.connectionLink:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.emptyDay { padding: 24px 18px; border: 1px dashed #D8D0C1; border-radius: 16px; background: #F4F0E7; text-align: center; }
+.emptyDay > span { display: block; color: #B09B76; font-size: 30px; }
+.emptyDay h2 { margin: 10px 0 8px; font-size: 26px; line-height: 1.2; }
+.emptyDay p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.75; word-break: keep-all; }
+.emptyDay small { display: block; margin-top: 10px; color: #8B8070; font-size: 11px; line-height: 1.6; }
+.invalidDay { padding: 32px 24px; text-align: center; }
+.invalidDay h2 { margin: 0 0 12px; font-size: 20px; }
+.invalidDay p { margin: 0 0 24px; color: var(--muted); font-size: 14px; line-height: 1.7; }

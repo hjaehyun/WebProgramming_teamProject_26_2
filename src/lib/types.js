@@ -20,6 +20,8 @@
  * @property {string} nick
  * @property {StyleId} style
  * @property {boolean} consent AI 전송 동의. 프로필 PUT에서 반드시 전달.
+ * @property {{gender:"unspecified"|"female"|"male"|"neutral",ageRange:"unspecified"|"child"|"teen"|"20s"|"30s"|"40s"|"50s"|"60plus",occupation:string,appearance:string}} artProfile 선택 입력. 하는 일 80자·외형 200자 이내.
+ * @property {boolean} artProfileEnabled AI 동의와 함께 켰을 때 새 그림 요청 시 반영. 기존 그림은 자동 변경하지 않음.
  */
 
 /**

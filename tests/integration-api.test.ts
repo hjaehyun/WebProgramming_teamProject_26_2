@@ -77,6 +77,11 @@ beforeEach(()=>{
 afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();});
 
 describe("authenticated API boundaries",()=>{
+  test("private dashboard identifies the authenticated owner for session-only draft isolation",async()=>{
+    const response=await me();
+    expect(response.status).toBe(200);
+    expect((await response.json()).account.id).toBe(alice);
+  });
   test("rejects cross-origin writes before authentication or job creation",async()=>{
     const r=await artworkPost(request("/api/artworks",{date,requestId},"https://another.invalid"));
     expect(r.status).toBe(403);expect(mocks.userClient).not.toHaveBeenCalled();expect(mocks.processOne).not.toHaveBeenCalled();
@@ -99,11 +104,65 @@ describe("authenticated API boundaries",()=>{
     expect(f.db.rpc).toHaveBeenCalledWith("save_team_entry",{p_id:entryId,p_content:"산책",p_date:date});
     expect(await r.json()).toEqual({entry:{id:entryId,text:"산책",at:"2026-11-11T01:00:00Z",weather:null}});
   });
+  test.each(["2026-02-30","2026-11-9","not-a-date",null])("invalid entry and generation dates %s are rejected before RPC or AI work",async invalidDate=>{
+    expect((await entryPost(request("/api/me/entries",{date:invalidDate,entry:{id:entryId,text:"지난 기록"}}))).status).toBe(400);
+    expect((await artworkPost(request("/api/artworks",{date:invalidDate,requestId}))).status).toBe(400);
+    expect(f.db.rpc).not.toHaveBeenCalled();expect(mocks.processOne).not.toHaveBeenCalled();
+  });
+  test.each(["entry","artwork"])("the database's future-date refusal reaches the %s caller without starting AI work",async kind=>{
+    const tomorrow=new Date(Date.now()+33*60*60*1000).toISOString().slice(0,10);
+    const message="오늘이나 지난 날만 사용할 수 있어요.";
+    // This checks the HTTP mapping; actual future-date enforcement is exercised by the PGlite tests.
+    f.db.rpc.mockResolvedValueOnce({data:null,error:{code:"P0001",message}} as never);
+    const response=kind==="entry"
+      ? await entryPost(request("/api/me/entries",{date:tomorrow,entry:{id:entryId,text:"미래 기록"}}))
+      : await artworkPost(request("/api/artworks",{date:tomorrow,requestId}));
+    expect(response.status).toBe(409);expect(await response.json()).toEqual({error:message});
+    expect(f.db.rpc).toHaveBeenCalledWith(kind==="entry"?"save_team_entry":"request_team_artwork",expect.objectContaining({p_date:tomorrow}));
+    expect(mocks.processOne).not.toHaveBeenCalled();
+  });
   test("profile requires explicit AI consent and maps frontend style",async()=>{
     const input={nick:"나",style:"crayon"};
     expect((await profilePut(request("/api/me/profile",input))).status).toBe(400);
     const r=await profilePut(request("/api/me/profile",{...input,consent:false}));
     expect(r.status).toBe(200);expect(f.tables.profiles[0].art_style).toBe("crayon");expect(f.tables.profiles[0].ai_consent_at).toBeNull();
+  });
+  test("optional appearance fields round-trip only through the owner's private profile",async()=>{
+    const artProfile={gender:"neutral",ageRange:"20s",occupation:"  개발자  ",appearance:"  둥근 안경  "};
+    const r=await profilePut(request("/api/me/profile",{nick:"나",style:"water",consent:true,artProfile,artProfileEnabled:true,user_id:bob}));
+    expect(r.status).toBe(200);
+    expect(f.tables.profiles[0]).toMatchObject({art_profile:{...artProfile,occupation:"개발자",appearance:"둥근 안경"},art_profile_enabled:true});
+    expect(f.tables.profiles[1]).not.toHaveProperty("art_profile");
+    const payload=await (await me()).json();
+    expect(payload.profile).toMatchObject({artProfile:{...artProfile,occupation:"개발자",appearance:"둥근 안경"},artProfileEnabled:true});
+    expect(payload.artworks[date]).not.toHaveProperty("profile_snapshot");
+  });
+  test("older clients editing the basic profile preserve saved appearance preferences",async()=>{
+    const saved={gender:"male",occupation:"도서관 사서"};
+    Object.assign(f.tables.profiles[0],{art_profile:saved,art_profile_enabled:true});
+    expect((await profilePut(request("/api/me/profile",{nick:"새 이름",style:"pencil",consent:true}))).status).toBe(200);
+    expect(f.tables.profiles[0]).toMatchObject({nickname:"새 이름",art_profile:saved,art_profile_enabled:true});
+  });
+  test("withdrawing AI consent disables appearance use while retaining editable preferences",async()=>{
+    Object.assign(f.tables.profiles[0],{art_profile:{appearance:"안경"},art_profile_enabled:true});
+    expect((await profilePut(request("/api/me/profile",{nick:"나",style:"water",consent:false,artProfileEnabled:true}))).status).toBe(200);
+    expect(f.tables.profiles[0]).toMatchObject({ai_consent_at:null,art_profile_enabled:false,art_profile:{appearance:"안경"}});
+    expect((await (await me()).json()).profile.artProfileEnabled).toBe(false);
+  });
+  test("old profiles receive empty optional fields without enabling personalization",async()=>{
+    const payload=await (await me()).json();
+    expect(payload.profile).toMatchObject({artProfile:{gender:"unspecified",ageRange:"unspecified",occupation:"",appearance:""},artProfileEnabled:false});
+  });
+  test.each([null,[],{gender:"invented"},{ageRange:"exact-age"},{occupation:"a".repeat(81)},{appearance:"a".repeat(201)},
+    {occupation:"line\nbreak"},{appearance:"hidden\u0000text"},{email:"private@example.test"}])("invalid art profile %j is rejected without changing the profile",async artProfile=>{
+    const before=JSON.stringify(f.tables.profiles);
+    const r=await profilePut(request("/api/me/profile",{nick:"나",style:"water",consent:true,artProfile,artProfileEnabled:true}));
+    expect(r.status).toBe(400);expect(JSON.stringify(f.tables.profiles)).toBe(before);
+  });
+  test("appearance use can be disabled independently and fields can be explicitly cleared",async()=>{
+    Object.assign(f.tables.profiles[0],{art_profile:{occupation:"개발자"},art_profile_enabled:true});
+    expect((await profilePut(request("/api/me/profile",{nick:"나",style:"water",consent:true,artProfile:{},artProfileEnabled:false}))).status).toBe(200);
+    expect(f.tables.profiles[0]).toMatchObject({art_profile_enabled:false,art_profile:{gender:"unspecified",ageRange:"unspecified",occupation:"",appearance:""}});
   });
   test("generation uses only the server job and owner-filtered saved records",async()=>{
     const r=await artworkPost(request("/api/artworks",{date,requestId,id:"other-artwork",imagePath:`${bob}/private.png`,entries:["injected"]}));
@@ -137,6 +196,60 @@ describe("authenticated API boundaries",()=>{
     f.tables.exhibitions=[];
     const response=await me();const data=await response.json();
     expect(Object.keys(data.artworks)).toHaveLength(1001);expect(data.artworks["saved-day-1000"].entries).toHaveLength(1);expect(data.drafts).toEqual({});
+  });
+  test("past drafts stay on their selected date even when written today, and only owner-filtered records are returned",async()=>{
+    const pastDay="2026-11-09",otherPastDay="2026-11-10";
+    const writtenNow=new Date().toISOString();
+    const today=new Date(Date.now()+9*60*60*1000).toISOString().slice(0,10);
+    f.tables.entries.push(
+      {id:"past-original",user_id:alice,entry_date:pastDay,content:"그날 남긴 기록",created_at:"2026-11-09T00:00:00Z"},
+      {id:"past-added-today",user_id:alice,entry_date:pastDay,content:"오늘 떠올린 지난 기록",created_at:writtenNow},
+      {id:"another-past",user_id:alice,entry_date:otherPastDay,content:"다른 지난 날",created_at:writtenNow},
+      {id:"today-draft",user_id:alice,entry_date:today,content:"오늘 기록",created_at:writtenNow},
+      {id:"foreign-past",user_id:bob,entry_date:pastDay,content:"타인의 지난 기록",created_at:writtenNow},
+    );
+    const response=await me();expect(response.status).toBe(200);
+    const data=await response.json();
+    expect(Object.keys(data.drafts).sort()).toEqual([pastDay,otherPastDay,today].sort());
+    expect(data.drafts[pastDay]).toEqual([
+      {id:"past-original",text:"그날 남긴 기록",at:"2026-11-09T00:00:00Z",weather:null},
+      {id:"past-added-today",text:"오늘 떠올린 지난 기록",at:writtenNow,weather:null},
+    ]);
+    expect(data.drafts[today].map((entry:Row)=>entry.id)).toEqual(["today-draft"]);
+    expect(data.drafts[date]).toBeUndefined();expect(data.artworks[date].entries.map((entry:Row)=>entry.id)).toEqual([entryId]);
+    expect(JSON.stringify(data)).not.toContain("타인의 지난 기록");
+    // The fixture emulates explicit filters, not RLS. Database ownership tests cover the latter.
+    for(const query of f.queries.filter(q=>["entries","daily_artworks"].includes(q.table))) expect(query.filters).toContainEqual(["user_id",alice]);
+    for(const [paths] of f.bucket.createSignedUrls.mock.calls) expect(paths.every(path=>path.startsWith(`${alice}/`))).toBe(true);
+  });
+  test("a past day's first generation moves its drafts into that artwork while leaving other dates alone",async()=>{
+    const pastDay="2026-11-09",untouchedDay="2026-11-10";
+    const pastArtId="00000000-0000-4000-8000-000000000090";
+    f.tables.entries.push(
+      {id:"past-a",user_id:alice,entry_date:pastDay,content:"지나간 산책",created_at:"2026-11-25T01:00:00Z"},
+      {id:"past-b",user_id:alice,entry_date:pastDay,content:"떠오른 풍경",created_at:"2026-11-25T02:00:00Z"},
+      {id:"untouched",user_id:alice,entry_date:untouchedDay,content:"다른 날의 기록",created_at:"2026-11-25T03:00:00Z"},
+      {id:"foreign-past",user_id:bob,entry_date:pastDay,content:"다른 사람 기록",created_at:"2026-11-25T01:00:00Z"},
+    );
+    const before=await (await me()).json();
+    expect(before.drafts[pastDay]).toHaveLength(2);expect(before.artworks[pastDay]).toBeUndefined();
+    // Model the committed RPC and worker result; the SQL tests verify creation and attempt accounting.
+    const newArtwork={...f.tables.daily_artworks[0],id:pastArtId,artwork_date:pastDay,status:"queued",image_path:null,attempts:0};
+    f.db.rpc.mockImplementationOnce(async()=>{f.tables.daily_artworks.push(newArtwork);return {data:pastArtId,error:null};});
+    mocks.processOne.mockImplementationOnce(async()=>{
+      Object.assign(newArtwork,{status:"ready",attempts:1,image_path:`${alice}/${pastArtId}/first.png`});
+      return {processed:true,status:"ready"};
+    });
+    const generated=await artworkPost(request("/api/artworks",{date:pastDay,redraw:false,requestId}));
+    expect(generated.status).toBe(200);
+    expect(f.db.rpc).toHaveBeenCalledWith("request_team_artwork",{p_date:pastDay,p_redraw:false,p_request_id:requestId});
+    expect(mocks.processOne).toHaveBeenCalledWith(pastArtId);
+    const artwork=(await generated.json()).artwork;
+    expect(artwork.date).toBe(pastDay);expect(artwork.entries.map((entry:Row)=>entry.id)).toEqual(["past-a","past-b"]);
+    const after=await (await me()).json();
+    expect(after.drafts[pastDay]).toBeUndefined();expect(after.artworks[pastDay].entries).toEqual(before.drafts[pastDay]);
+    expect(after.drafts[untouchedDay]).toEqual(before.drafts[untouchedDay]);
+    expect(after.artworks[date]).toEqual(before.artworks[date]);
   });
   test("a picture reports whether its fragments changed since drawing, without exposing the snapshot",async()=>{
     f.tables.daily_artworks[0].entry_snapshot=[{content:"내 기록",created_at:"2026-11-11T00:00:00+00:00"}];
@@ -173,9 +286,11 @@ describe("authenticated API boundaries",()=>{
 
 describe("public exhibition projection",()=>{
   test("does not serialize private notes, user identifiers, storage paths or signed tokens",async()=>{
+    f.tables.profiles[0].art_profile={appearance:"private appearance marker",occupation:"private occupation marker"};
+    f.tables.daily_artworks[0].profile_snapshot=f.tables.profiles[0].art_profile;
     const r=await exhibitionGet(exhibitionId);expect(r.status).toBe(200);const result=await r.json();const serialized=JSON.stringify(result);
     expect(result.items).toHaveLength(1);expect(result.items[0].imageUrl).toBe(`/api/exhibitions/${exhibitionId}/images/${date}`);
-    for(const value of [alice,bob,"내 기록","private-token","image_path","user_id","alice@example.test"]) expect(serialized).not.toContain(value);
+    for(const value of [alice,bob,"내 기록","private-token","image_path","user_id","alice@example.test","private appearance marker","private occupation marker","profile_snapshot","art_profile"]) expect(serialized).not.toContain(value);
     expect(f.bucket.createSignedUrls).not.toHaveBeenCalled();
   });
   test("private exhibitions deny signed-out viewers before reading artworks",async()=>{
