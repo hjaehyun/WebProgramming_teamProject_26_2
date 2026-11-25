@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { getCoarseCoords } from "./geo";
 import { shareInflight } from "./inflight";
 import { createMutationQueue } from "./mutation-queue";
+import { createFrameWrites } from "./frame-writes";
 import { createSnapshotSync } from "./snapshot-sync";
 import { nextExhibitionDates } from "./exhibition-selection";
 import { todayKey } from "./date";
@@ -24,6 +25,7 @@ function withEntries(d, date, fn) {
   if (a) return { ...d, artworks: { ...d.artworks, [date]: { ...a, entries: fn(a.entries), entriesChanged: true } } };
   return { ...d, drafts: { ...d.drafts, [date]: fn(d.drafts[date] ?? []) } };
 }
+const sendFrame = (date, frame) => api("PUT", `/api/me/artworks/${encodeURIComponent(date)}/frame`, { frame });
 function createEmpty() {
   return { account: null, profile: null, drafts: {}, artworks: {}, exhibition: { id: "", title: "나의 하루조각", desc: "", isPublic: false, dates: [] }, capabilities: { music: false, weather: false }, deletionPending: false };
 }
@@ -35,6 +37,7 @@ export function StoreProvider({ children }) {
   const snapshotSync = useRef(createSnapshotSync());
   const pendingEntries = useRef(createMutationQueue());
   const songRequests = useRef(new Map());
+  const frameWrites = useRef(createFrameWrites(sendFrame));
   const exhibitionRequest = useRef(false);
   const [exhibitionSaving, setExhibitionSaving] = useState(false);
   const newSession = useCallback(() => {
@@ -42,6 +45,7 @@ export function StoreProvider({ children }) {
     snapshotSync.current = createSnapshotSync();
     pendingEntries.current = createMutationQueue();
     songRequests.current = new Map();
+    frameWrites.current = createFrameWrites(sendFrame);
     exhibitionRequest.current = false;
     setExhibitionSaving(false);
   }, []);
@@ -178,6 +182,13 @@ export function StoreProvider({ children }) {
         return writeEntry(date, id, () => api("DELETE", `/api/me/entries/${encodeURIComponent(id)}`));
       },
       requestSong,
+      /** Shows the frame at once; changes for one day are sent in order and a failure reloads the server's choice. */
+      setFrame: (date, frame) => {
+        update(d => { const a = d.artworks[date]; return a ? { ...d, artworks: { ...d.artworks, [date]: { ...a, frame } } } : d; });
+        const saving = trackWrite(() => frameWrites.current.write(date, frame));
+        report(saving);
+        return saving;
+      },
       voteSong: async (songId, vote) => { await api("POST", `/api/me/songs/${songId}/feedback`, { vote }); },
       toggleExhibit: date => {
         const dates = nextExhibitionDates(cur.exhibition.dates, cur.artworks, date);

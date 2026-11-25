@@ -1,0 +1,32 @@
+/* Frames around a picture, CSS only. Sizes are in em so .lg (detail, public show) and .sm (exhibition
+   grid) scale together. Decorations stay within about half an em of the frame so they are not cut off
+   by the scroll area or push the screen sideways. Paper colors are fixed: frames look the same on the
+   light app and the dark public show. */
+.frame { position: relative; display: block; color: #3A3631; }
+.lg { font-size: 16px; }
+.sm { font-size: 9px; }
+.mat { display: block; }
+
+.diary { background: #FFFFFF; border: .14em solid #3A3631; }
+.diary .top { display: grid; grid-template-columns: minmax(0, 1fr) auto; border-bottom: .14em solid #3A3631; font-family: var(--font-hand); font-size: 1.05em; line-height: 1.2; }
+.diary .top > span { padding: .35em .6em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.diary .top > span + span { border-left: .14em solid #3A3631; }
+.diary .mat { padding: .55em; border-bottom: .14em solid #3A3631; }
+.grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.grid i { font-style: normal; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; font-family: var(--font-hand); font-size: 1.15em; line-height: 1; border-right: 1px solid #D9CFBD; border-bottom: 1px solid #D9CFBD; }
+.grid i:nth-child(10n) { border-right: 0; }
+.grid i:nth-last-child(-n+10) { border-bottom: 0; }
+
+.polaroid { background: #FFFFFF; padding: .75em .75em 0; box-shadow: 0 .5em 1.4em rgba(0, 0, 0, .18); transform: rotate(-1.5deg); }
+.polaroid .cap { font-family: var(--font-hand); font-weight: 700; font-size: 1.35em; text-align: center; padding: .45em .3em .7em; line-height: 1.2; }
+
+.wood { padding: 1.05em; border-radius: .2em; background: repeating-linear-gradient(90deg, #8A5A33 0 .2em, #9A683E .2em .55em, #7A4F2D .55em .68em, #8A5A33 .68em 1.1em); box-shadow: inset 0 0 0 .1em rgba(0, 0, 0, .3), 0 .5em 1.3em rgba(0, 0, 0, .25); }
+.wood .mat { padding: .85em; background: #F6F1E6; box-shadow: inset 0 .15em .45em rgba(0, 0, 0, .28); }
+
+.tape { background: #FFFFFF; padding: .5em; transform: rotate(1.2deg); box-shadow: 0 .3em .9em rgba(0, 0, 0, .16); }
+.tape::before, .tape::after { content: ""; position: absolute; z-index: 1; top: .7em; width: 4.6em; height: 1.4em; background: rgba(236, 205, 120, .78); box-shadow: 0 .05em .15em rgba(0, 0, 0, .08); }
+.tape::before { left: -.5em; transform: rotate(-32deg); }
+.tape::after { right: -.5em; transform: rotate(32deg); }
+
+.sketch { background: #FFFDF8; padding: 2.1em .9em .9em; border-radius: .35em; box-shadow: 0 .3em 1em rgba(0, 0, 0, .14); }
+.sketch::before { content: ""; position: absolute; top: .35em; left: .9em; right: .9em; height: 1.3em; background: radial-gradient(circle at 50% 70%, transparent 0 .18em, #6B665E .2em .3em, transparent .32em) repeat-x; background-size: 1.3em 1.3em; }

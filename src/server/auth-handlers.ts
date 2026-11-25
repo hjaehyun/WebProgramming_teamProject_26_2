@@ -26,7 +26,7 @@ export function auth(request: Request, mode: "signup"|"login"|"logout") { return
 export function me() { return run(async()=>{const {db,user,profile}=await authenticated(true);return json(await dashboard(db,user,profile));}); }
 export function profilePut(request:Request) { return run(async()=>{
   mutation(request);const {db,user}=await authenticated();
-  const p=z.object({nick:z.string().trim().min(1).max(30),style:z.enum(["water","pencil","crayon","story","gouache"]),consent:z.boolean()}).parse(await body(request));
+  const p=z.object({nick:z.string().trim().min(1).max(30),style:z.enum(["water","pencil","crayon","story","anime","gouache"]),consent:z.boolean()}).parse(await body(request));
   const {error}=await db.from("profiles").update({nickname:p.nick,art_style:fromStyle(p.style),ai_consent_at:p.consent?new Date().toISOString():null,onboarded:true}).eq("id",user.id);
   if(error) throw error;return json({ok:true});
 }); }

@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import Framed from "@/components/Framed";
 import Picture from "@/components/Picture";
 import SongCard from "@/components/SongCard";
 import Weather from "@/components/Weather";
@@ -11,6 +12,7 @@ import { generateArtwork } from "@/lib/ai";
 import { downloadImage } from "@/lib/download";
 import { byTime, sortedArtworks, useStore } from "@/lib/store";
 import { canChooseExhibitionArtwork } from "@/lib/exhibition-selection";
+import { FRAMES, dayWeathers, frameOf } from "@/lib/frames";
 import { styleOf, withParticle } from "@/lib/styles";
 import s from "./detail.module.css";
 
@@ -27,7 +29,7 @@ export default function DetailPage() {
 function Detail() {
   const { date } = useParams();
   const router = useRouter();
-  const { db, toggleExhibit, applyArtwork, requestSong, voteSong, refresh, exhibitionSaving, addEntry, editEntry, removeEntry, flushEntries } = useStore();
+  const { db, toggleExhibit, applyArtwork, requestSong, voteSong, refresh, exhibitionSaving, addEntry, editEntry, removeEntry, flushEntries, setFrame } = useStore();
   const art = db.artworks[date];
   const [saving, setSaving] = useState(false);
   const [redrawing, setRedrawing] = useState(false);
@@ -176,15 +178,29 @@ function Detail() {
       </TopBar>
 
       <main className={`scroll ${s.main}`}>
-        <figure className={s.figure}>
-          <span className={s.frame} aria-busy={redrawing}>
+        <figure className={s.figure} aria-busy={redrawing}>
+          <Framed frame={art.frame} date={date} summary={art.summary} weathers={dayWeathers(art.entries)} basicClassName={s.frame}>
             <Picture scene={art.scene} imageUrl={art.imageUrl} imageError={art.imageError} alt={art.summary} />
-          </span>
+          </Framed>
           <figcaption>
             <span className={s.badge}>{styleOf(art.style).label}</span>
             <span role="status">{redrawing || ["queued", "processing"].includes(art.status) ? "그리는 중… 화면을 닫아도 작업은 이어져요." : art.status === "failed" ? art.error || "생성에 실패했어요. 다시 시도해 주세요." : art.imageUrl ? "" : "그림을 불러오지 못했어요."}</span>
           </figcaption>
         </figure>
+
+        {art.status === "ready" && (
+          <fieldset className={s.frames} disabled={redrawing}>
+            <legend>액자</legend>
+            <div className={s.chips}>
+              {FRAMES.map((f) => (
+                <label key={f.id} className={s.chip}>
+                  <input type="radio" name="frame" value={f.id} checked={frameOf(art.frame) === f.id} onChange={() => setFrame(date, f.id)} />
+                  <span>{f.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
 
         <section className="card">
           <h2 className={`eyebrow ${s.h}`}>AI가 정리한 장면</h2>

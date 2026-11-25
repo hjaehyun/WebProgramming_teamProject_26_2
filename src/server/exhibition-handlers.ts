@@ -28,14 +28,14 @@ export function exhibitionGet(id:string) {return run(async()=>{
   if(items.error||profile.error) throw items.error??profile.error;
   if(profile.data.deleting_at) throw new HttpError(404,"전시를 찾을 수 없어요.");
   const ids=(items.data??[]).map(i=>i.artwork_id);
-  const art=ids.length?await db.from("daily_artworks").select("id,artwork_date,scene,image_path,scene_summary").eq("user_id",ex.data.user_id).eq("status","ready").in("id",ids):{data:[],error:null};
+  const art=ids.length?await db.from("daily_artworks").select("id,artwork_date,scene,image_path,scene_summary,frame").eq("user_id",ex.data.user_id).eq("status","ready").in("id",ids):{data:[],error:null};
   if(art.error) throw art.error;
   // The song is public with the picture: video id, title and channel only. The admin client bypasses
   // RLS, so the lookup is limited to this exhibition's own selected, finished pictures.
   const {songs}=await artworkSongs(db,(art.data??[]).map(a=>a.id));
   const songOf=(artworkId:string)=>{const s=songs.get(artworkId);return s?{videoId:s.videoId,title:s.title,channel:s.channel}:null;};
   return json({id:ex.data.id,title:ex.data.title,desc:ex.data.description,isPublic:ex.data.is_public,ownerNick:profile.data.nickname,
-    items:(items.data??[]).flatMap(i=>{const a=art.data?.find(a=>a.id===i.artwork_id);return a?[{date:a.artwork_date,scene:a.scene,imageUrl:a.image_path?`/api/exhibitions/${id}/images/${a.artwork_date}`:null,summary:a.scene_summary??"",note:i.caption||null,song:songOf(a.id)}]:[];})});
+    items:(items.data??[]).flatMap(i=>{const a=art.data?.find(a=>a.id===i.artwork_id);return a?[{date:a.artwork_date,scene:a.scene,imageUrl:a.image_path?`/api/exhibitions/${id}/images/${a.artwork_date}`:null,summary:a.scene_summary??"",note:i.caption||null,song:songOf(a.id),frame:a.frame??"basic"}]:[];})});
 });}
 
 // Public image links contain neither user IDs nor bearer tokens. Recheck publication

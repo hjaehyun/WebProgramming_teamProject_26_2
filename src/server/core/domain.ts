@@ -5,9 +5,13 @@ export const styles = {
   pencil: { label: "색연필 드로잉", prompt: "Colored pencil on cream paper, tactile grain, gentle hand-drawn lines, warm muted colors" },
   gouache: { label: "포근한 과슈", prompt: "Cozy gouache illustration, matte flat shapes, warm limited palette, paper texture" },
   crayon: { label: "크레파스", prompt: "Warm wax crayon drawing, tactile thick strokes and soft paper texture" },
-  story: { label: "동화책", prompt: "Cozy storybook illustration, gentle shapes, warm light, soft painterly texture" }
+  story: { label: "동화책", prompt: "Cozy storybook illustration, gentle shapes, warm light, soft painterly texture" },
+  // Described by its features only: never name a studio, artist, work or character.
+  anime: { label: "애니 풍경", prompt: "Hand-painted anime background art, lush deep greens, towering cumulus clouds, warm soft sunlight, nostalgic everyday atmosphere, painterly detail" }
 } as const;
 export type Style = keyof typeof styles;
+/** Frames a picture can be shown in (CSS only, the image is unchanged). Same list as the DB check. */
+export const frames = ["basic", "diary", "polaroid", "wood", "tape", "sketch"] as const;
 /** Atmosphere of a day's scene; decides which song list a picture draws from. */
 export const moods = ["calm", "cozy", "lively", "lonely", "flutter", "dreamy"] as const;
 export type Mood = (typeof moods)[number];

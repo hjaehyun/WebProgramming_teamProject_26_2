@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import Framed from "@/components/Framed";
 import Picture from "@/components/Picture";
 import SongCard from "@/components/SongCard";
 import { IconBack, IconNext } from "@/components/ui";
@@ -82,9 +83,10 @@ function Gallery({ ex, i, setI }) {
         ) : (
           <>
             <figure className={s.figure}>
-              <div className={s.mat}>
+              {/* No weather here: the public show never carries it. */}
+              <Framed frame={cur.frame} date={cur.date} summary={cur.summary} basicClassName={s.mat}>
                 <Picture scene={cur.scene} imageUrl={cur.imageUrl} alt={cur.summary} />
-              </div>
+              </Framed>
               <figcaption>
                 <span>{monthDay(cur.date)}</span>
                 <span className="hand">{cur.note ?? cur.summary}</span>
