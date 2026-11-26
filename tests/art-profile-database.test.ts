@@ -145,6 +145,15 @@ describe("generation-time profile snapshots", () => {
     await request(22,true); expect(await row(art)).toMatchObject({ status: "queued", profile_snapshot: changed, image_prompt: null, attempts: 1 });
     expect((await claim(art)).attempts).toBe(2);
   });
+  test("the selected male appearance reaches both the initial claim and an explicit redraw claim", async () => {
+    const maleDetails = { gender: "male", ageRange: "20s", appearance: "긴 머리와 안경" };
+    await profile(maleDetails); await save(); const art = await request();
+    expect(await claim(art)).toMatchObject({ profile_snapshot: maleDetails, attempts: 1 });
+    await finish(art);
+    await request(21, true);
+    expect(await row(art)).toMatchObject({ profile_snapshot: maleDetails, image_prompt: null, attempts: 1 });
+    expect(await claim(art)).toMatchObject({ profile_snapshot: maleDetails, image_prompt: null, attempts: 2 });
+  });
   test("a changed profile on retry discards the old prompt while unchanged retry reuses it", async () => {
     await profile(); const art = await picture("failed");
     await request(21); expect(await row(art)).toMatchObject({ image_prompt: "Existing saved prompt", profile_snapshot: details });

@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { moods, styles, type Style } from "./domain";
-import { artProfileContext } from "./art-profile";
+import { artProfileContext, artProfileImagePrompt } from "./art-profile";
 
 export function aiConfigured() {
   return Boolean(process.env.OPENAI_API_KEY?.trim() && process.env.OPENAI_TEXT_MODEL?.trim() && process.env.OPENAI_IMAGE_MODEL?.trim() && (process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()));
@@ -40,7 +40,8 @@ export async function summarize(entries: { content: string; created_at: string }
   const output = content.filter((c: { type: string }) => c.type === "output_text").map((c: { text: string }) => c.text).join("");
   return sceneSchema.parse(JSON.parse(output));
 }
-export async function illustrate(prompt: string) {
+export async function illustrate(scenePrompt: string, profileSnapshot: unknown = {}) {
+  const prompt = artProfileImagePrompt(scenePrompt, profileSnapshot);
   const data = await api("images/generations", { model: process.env.OPENAI_IMAGE_MODEL?.trim(), prompt, n: 1, size: "1024x1024", quality: "low", output_format: "png" }, 180000);
   const encoded = data.data?.[0]?.b64_json;
   if (typeof encoded !== "string" || encoded.length > 14500000) throw new Error("그림 응답을 확인하지 못했어요.");

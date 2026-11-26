@@ -24,7 +24,9 @@ export async function processOne(id?: string) {
     // write is separate and never fails the picture. A new summary without a clear mood stores NULL
     // and clears the mood of the drawing it replaces. Song selection uses a default calm list for NULL.
     if (!resumed) try { await db.from("daily_artworks").update({ mood: scene.mood ?? null }).eq("id", job.id).eq("claim_token", job.claim_token).eq("status", "processing").select("id").maybeSingle(); } catch { /* optional mood storage must not fail the picture */ }
-    const png = await illustrate(scene.image_prompt);
+    // The generated scene text may omit or guess appearance. Reapply this job's
+    // consented snapshot for every image attempt, including redraws and resumes.
+    const png = await illustrate(scene.image_prompt, job.profile_snapshot ?? {});
     const { error: uploadError } = await db.storage.from("artworks").upload(path, png, { contentType: "image/png", upsert: false });
     if (uploadError) throw uploadError;
     uploaded = true;

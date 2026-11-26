@@ -227,6 +227,17 @@ describe("optional illustration profile", () => {
     expect(page.save.mock.calls[0][0]).toMatchObject({ consent: true, artProfileEnabled: false, artProfile: details });
   });
 
+  test("selecting male presentation explains disabled reflection without silently opting the user in", async () => {
+    const page = mount({ nick: "나", style: "water", consent: true, artProfile: emptyDetails, artProfileEnabled: false }, "step=details");
+    page.change("art-gender", "male");
+    expect(page.field("art-profile-enabled").props.checked).toBe(false);
+    expect(page.text(page.field("art-profile-status"))).toContain("현재 성별·외형 정보는 그림에 반영되지 않아요.");
+    await page.button("프로필 저장하기").props.onClick();
+    expect(page.save.mock.calls[0][0]).toMatchObject({ consent: true, artProfile: { gender: "male" }, artProfileEnabled: false });
+    page.change("art-profile-enabled", true);
+    expect(page.text(page.field("art-profile-status"))).toContain("저장하면 새로 만들거나 다시 그리는 그림부터 적용해요.");
+  });
+
   test("turning reflection off keeps editable information but sends an explicit false", async () => {
     const page = mount({ nick: "나", style: "water", consent: true, artProfile: details, artProfileEnabled: true });
     page.change("art-profile-enabled", false);

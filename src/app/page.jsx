@@ -27,10 +27,22 @@ function LoginForm() {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const passwordInput = useRef(null);
+  const confirmationInput = useRef(null);
+  const confirmationNotice = useRef(null);
+  const formHeading = useRef(null);
+  const modeFocusTarget = useRef(null);
+  const authenticationPending = useRef(false);
+  const resendPending = useRef(false);
   const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
   const [message, setMessage] = useState(null);
+  const [passwordMismatch, setPasswordMismatch] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
+  const [resendMessage, setResendMessage] = useState(null);
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
+  const [resendSeconds, setResendSeconds] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const linkMessage = params.get("password") === "updated" ? "비밀번호를 바꿨어요. 새 비밀번호로 로그인해 주세요." : params.get("error") ? AUTH_ERRORS[params.get("error")] ?? AUTH_ERRORS.oauth : null;
   const shownMessage = message || (!dismissed && linkMessage);
@@ -41,40 +53,112 @@ function LoginForm() {
     if (ready && authed) router.replace(db.profile ? "/today" : "/profile");
   }, [ready, authed, db.profile, router]);
 
+  useEffect(() => {
+    if (confirmationSent) confirmationNotice.current?.focus();
+  }, [confirmationSent]);
+
+  useEffect(() => {
+    if (modeFocusTarget.current === "password") passwordInput.current?.focus();
+    else if (modeFocusTarget.current === "heading") formHeading.current?.focus();
+    modeFocusTarget.current = null;
+  }, [mode]);
+
+  useEffect(() => {
+    if (!resendAvailableAt) return;
+    const update = () => {
+      const seconds = Math.max(0, Math.ceil((resendAvailableAt - Date.now()) / 1000));
+      setResendSeconds(seconds);
+      if (!seconds) clearInterval(timer);
+    };
+    const timer = setInterval(update, 1000);
+    document.addEventListener("visibilitychange", update);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", update); };
+  }, [resendAvailableAt]);
+
+  function startResendCooldown(seconds = 60) {
+    const delay = Number.isFinite(seconds) ? Math.max(60, Math.ceil(seconds)) : 60;
+    setResendAvailableAt(Date.now() + delay * 1000);
+    setResendSeconds(delay);
+  }
+
   async function onSubmit(e) {
     e.preventDefault();
     setDismissed(true);
-    if (busy) return;
+    if (busy || resending || authenticationPending.current) return;
     if (signup && password.length < 8) {
       setMessage("비밀번호는 8자 이상이어야 해요");
+      passwordInput.current?.focus();
       return;
     }
+    if (signup && password !== passwordConfirmation) {
+      setPasswordMismatch(true);
+      setMessage("비밀번호가 서로 달라요. 다시 확인해 주세요.");
+      confirmationInput.current?.focus();
+      return;
+    }
+    authenticationPending.current = true;
     setBusy(true);
     setMessage(null);
+    setPasswordMismatch(false);
+    setResendMessage(null);
     setConfirmationSent(false);
     try {
+      const result = await (signup ? signUp(email, password) : signIn(email, password));
+      if (signup) { setPassword(""); setPasswordConfirmation(""); }
       await finishAuthentication(
-        signup ? signUp(email, password) : signIn(email, password),
-        () => { setConfirmationSent(true); setPassword(""); setBusy(false); },
+        result,
+        () => { setConfirmationSent(true); startResendCooldown(); setBusy(false); },
         path => router.push(path),
       );
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "잠시 후 다시 해주세요");
       setBusy(false);
+    } finally {
+      authenticationPending.current = false;
     }
   }
 
-  function switchMode() {
-    if (busy) return;
+  function switchMode(focusPassword = false) {
+    if (busy || resending || authenticationPending.current || resendPending.current) return;
+    modeFocusTarget.current = focusPassword ? "password" : "heading";
     setMode(signup ? "login" : "signup");
+    setPassword("");
+    setPasswordConfirmation("");
     setMessage(null);
+    setPasswordMismatch(false);
     setConfirmationSent(false);
+    setResendMessage(null);
+    setResendAvailableAt(0);
+    setResendSeconds(0);
     setDismissed(true);
+  }
+
+  async function resendConfirmation() {
+    if (!signup || !confirmationSent || busy || resendPending.current || Date.now() < resendAvailableAt) return;
+    resendPending.current = true;
+    setResending(true);
+    setResendMessage(null);
+    startResendCooldown();
+    try {
+      const response = await fetch("/api/auth/resend-confirmation", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await response.json().catch(() => null);
+      const retryAfter = Number(response.headers.get("Retry-After"));
+      startResendCooldown(Math.max(Number(data?.retryAfterSeconds) || 60, retryAfter || 0));
+      if (!response.ok) throw new Error(data?.error || "인증 메일을 다시 요청하지 못했어요. 잠시 후 다시 해주세요.");
+      setResendMessage({ ok: true, text: data?.message || "인증 메일을 다시 요청했어요. 인증이 필요한 계정이라면 메일함을 확인해 주세요." });
+    } catch (err) {
+      setResendMessage({ ok: false, text: err instanceof Error ? err.message : "잠시 후 다시 해주세요." });
+    } finally {
+      resendPending.current = false;
+      setResending(false);
+    }
   }
 
   return (
     <div className="app">
-      <div className={s.wrap}>
+      <div className={signup ? `${s.wrap} ${s.signupMode}` : s.wrap}>
         <div className={s.hero}>
           <div className={s.logo} aria-hidden="true">
             {LOGO.map((c, i) => (
@@ -91,7 +175,11 @@ function LoginForm() {
           </div>
         </div>
 
-        <form className={s.form} onSubmit={onSubmit}>
+        <form className={s.form} onSubmit={onSubmit} aria-labelledby="auth-form-title">
+          <div className={s.formHeading}>
+            <h2 id="auth-form-title" ref={formHeading} tabIndex={-1}>{signup ? "회원가입" : "로그인"}</h2>
+            <p>{signup ? "이메일을 인증하고 나만의 하루조각을 시작해요." : "남겨 둔 조각들을 이어서 만나보세요."}</p>
+          </div>
           <label className="field">
             이메일
             <input
@@ -100,9 +188,12 @@ function LoginForm() {
               placeholder="you@example.com"
               autoComplete="email"
               required
+              disabled={busy || resending}
+              aria-describedby={signup ? "signup-email-hint" : undefined}
               value={email}
-              onChange={(e) => { setEmail(e.target.value); setConfirmationSent(false); }}
+              onChange={(e) => { setEmail(e.target.value); setConfirmationSent(false); setResendMessage(null); }}
             />
+            {signup && <span className={s.fieldHint} id="signup-email-hint">인증 메일을 받을 수 있는 주소를 입력해 주세요.</span>}
           </label>
           <label className="field">
             비밀번호
@@ -113,21 +204,41 @@ function LoginForm() {
               placeholder="8자 이상"
               autoComplete={signup ? "new-password" : "current-password"}
               required
+              disabled={busy || resending}
               minLength={signup ? 8 : undefined}
+              maxLength={128}
               value={password}
-              onChange={(e) => { setPassword(e.target.value); setConfirmationSent(false); }}
+              onChange={(e) => { setPassword(e.target.value); setConfirmationSent(false); setPasswordMismatch(false); setMessage(null); }}
             />
           </label>
+          {signup && <label className="field">
+            비밀번호 확인
+            <input ref={confirmationInput} className="input" type="password" autoComplete="new-password" placeholder="비밀번호를 한 번 더 입력해 주세요" required minLength={8} maxLength={128} disabled={busy || resending} value={passwordConfirmation}
+              aria-invalid={passwordMismatch || undefined} aria-describedby={passwordMismatch ? "auth-error" : undefined}
+              onChange={(e) => { setPasswordConfirmation(e.target.value); setPasswordMismatch(false); setMessage(null); }} />
+          </label>}
           {!signup && <Link href="/forgot-password">비밀번호를 잊으셨나요?</Link>}
-          {confirmationSent && (
-            <div className={s.confirmation}>
+          {signup && confirmationSent && (
+            <div className={s.confirmation} ref={confirmationNotice} tabIndex={-1} aria-label="가입 요청 안내">
               <div className={s.confirmationMessage} role="status">
                 <strong>가입 요청을 확인했어요.</strong>
                 <p>새로 가입하는 주소라면 인증 메일을 확인해 주세요.</p>
                 <p>이미 인증을 완료한 계정에는 가입 인증 메일이 다시 발송되지 않아요. 로그인하거나 비밀번호를 재설정해 주세요.</p>
               </div>
+              <div className={s.mailHelp}>
+                <strong>메일이 보이지 않나요?</strong>
+                <ul>
+                  <li>스팸메일함과 프로모션함을 확인해 주세요.</li>
+                  <li>이메일 주소에 오타가 없는지, 수신 차단 설정이 되어 있는지 확인해 주세요.</li>
+                  <li>몇 분 기다린 뒤에도 없다면 인증 메일을 다시 요청해 주세요.</li>
+                </ul>
+              </div>
+              <button className={`btn ghost ${s.resend}`} type="button" disabled={busy || resending || resendSeconds > 0} onClick={resendConfirmation}>
+                {resending ? "인증 메일 요청 중…" : resendSeconds > 0 ? `인증 메일 다시 받기 (${resendSeconds}초)` : "인증 메일 다시 받기"}
+              </button>
+              {resendMessage && <p className={resendMessage.ok ? s.resendStatus : s.error} role={resendMessage.ok ? "status" : "alert"}>{resendMessage.text}</p>}
               <div className={s.confirmationActions} role="group" aria-label="기존 계정으로 계속하기">
-                <button className="btn" type="button" disabled={busy} onClick={() => { switchMode(); passwordInput.current?.focus(); }}>
+                <button className="btn" type="button" disabled={busy || resending} onClick={() => switchMode(true)}>
                   로그인하기
                 </button>
                 <Link className="btn ghost" href="/forgot-password">비밀번호 재설정</Link>
@@ -135,7 +246,7 @@ function LoginForm() {
             </div>
           )}
           {shownMessage && (
-            <p className={s.error} role="alert">
+            <p className={s.error} role="alert" id="auth-error">
               {shownMessage}
             </p>
           )}
@@ -145,7 +256,7 @@ function LoginForm() {
               자세한 내용은 개인정보처리방침에서 확인해 주세요.
             </p>
           )}
-          <button className="btn" type="submit" style={{ marginTop: 8 }} disabled={busy}>
+          <button className="btn" type="submit" style={{ marginTop: 8 }} disabled={busy || resending}>
             {busy ? "잠시만요…" : signup ? "가입하기" : "로그인"}
           </button>
           <div className={s.or} aria-hidden="true">
@@ -164,7 +275,7 @@ function LoginForm() {
           </a>
           <div className={s.signup}>
             {signup ? "이미 계정이 있나요?" : "처음이신가요?"}
-            <button type="button" onClick={switchMode} disabled={busy}>
+            <button type="button" onClick={() => switchMode()} disabled={busy || resending}>
               {signup ? "로그인" : "회원가입"}
             </button>
           </div>

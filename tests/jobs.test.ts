@@ -101,18 +101,29 @@ describe("artwork final-write reconciliation", () => {
     dependencies.summarize.mockResolvedValue({ title: "산책", summary: "공원을 걸었다.", image_prompt: "A park", tags: [], scene: "park" });
     expect(await processOne()).toEqual({ processed: true, status: "ready" });
     expect(dependencies.summarize).toHaveBeenCalledExactlyOnceWith(state.row.entry_snapshot, "watercolor", state.row.profile_snapshot);
+    expect(dependencies.illustrate).toHaveBeenCalledExactlyOnceWith("A park", state.row.profile_snapshot);
   });
   test("legacy jobs without a profile snapshot remain journal-only", async () => {
     const state = storageAndDatabase(); state.row.image_prompt = null;
     dependencies.summarize.mockResolvedValue({ title: "산책", summary: "공원을 걸었다.", image_prompt: "A park", tags: [], scene: "park" });
     expect(await processOne()).toEqual({ processed: true, status: "ready" });
     expect(dependencies.summarize).toHaveBeenCalledExactlyOnceWith(state.row.entry_snapshot, "watercolor", {});
+    expect(dependencies.illustrate).toHaveBeenCalledExactlyOnceWith("A park", {});
   });
-  test("resuming a saved prompt does not re-extract or resend profile context", async () => {
+  test("resuming a saved prompt skips summary but still applies the job's appearance to the image", async () => {
     const state = storageAndDatabase(); state.row.profile_snapshot = { occupation: "사서" };
     expect(await processOne()).toEqual({ processed: true, status: "ready" });
     expect(dependencies.summarize).not.toHaveBeenCalled();
-    expect(dependencies.illustrate).toHaveBeenCalledExactlyOnceWith("A gentle watercolor scene");
+    expect(dependencies.illustrate).toHaveBeenCalledExactlyOnceWith("A gentle watercolor scene", state.row.profile_snapshot);
+  });
+  test.each([1, 2])("attempt %i sends the male snapshot directly even if the new summary guessed otherwise", async attempts => {
+    const state = storageAndDatabase();
+    state.row.attempts = attempts; state.row.image_prompt = null;
+    state.row.image_path = attempts === 2 ? "user-1/artwork-1/previous.png" : null;
+    state.row.profile_snapshot = { gender: "male", ageRange: "20s", appearance: "긴 머리" };
+    dependencies.summarize.mockResolvedValue({ title: "책", summary: "책을 읽었다.", image_prompt: "A woman reading a book", tags: [], scene: "day" });
+    expect(await processOne()).toEqual({ processed: true, status: "ready" });
+    expect(dependencies.illustrate).toHaveBeenCalledExactlyOnceWith("A woman reading a book", state.row.profile_snapshot);
   });
   test("keeps the uploaded image after a normal completed write", async () => {
     const state = storageAndDatabase();
