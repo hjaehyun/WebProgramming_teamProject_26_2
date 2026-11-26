@@ -15,7 +15,7 @@ export function cartoonsEnabled() {
   return process.env.DAILY_CARTOON_ENABLED !== "false" && aiConfigured();
 }
 
-export function cartoonAvailableAt(date: string) { return `${date}T19:00:00+09:00`; }
+export function cartoonAvailableAt(date: string) { return `${date}T22:00:00+09:00`; }
 
 /** Past editions use only articles published on their requested Korean calendar date. */
 export function cartoonCanRequest(row: Row | null, date: string, now = new Date()) {
@@ -67,6 +67,9 @@ export async function enqueueCartoon(date: string) {
 /** A DB lease, not a process-local flag, bounds concurrent requests and provider charges. */
 export async function processDailyCartoon(date = seoulDate(), retryUnavailable = false) {
   if (!cartoonsEnabled()) return { processed: false, status: "disabled" };
+  // Protect direct worker callers as well as the public API: an early run must
+  // not consume the shared attempt budget before the evening news is available.
+  if (date === seoulDate() && Date.now() < Date.parse(cartoonAvailableAt(date))) return { processed: false, status: "not_due" };
   const db = adminClient();
   const claimed = await db.rpc("claim_daily_cartoon", retryUnavailable ? { p_date: date, p_retry_unavailable: true } : { p_date: date });
   if (claimed.error) throw claimed.error;
@@ -85,7 +88,7 @@ export async function processDailyCartoon(date = seoulDate(), retryUnavailable =
       if (!news) {
         const unavailable = await update({ status: "unavailable", completed_at: new Date().toISOString(),
           retry_after: job.attempts < 3 ? new Date(Date.now() + RETRY_MS).toISOString() : null,
-          error_message: "이번 검색에서는 선택한 날짜의 기사와 출처를 충분히 확인하지 못했어요." });
+          error_message: "선택한 날짜의 방송 선두 기사와 독립 매체의 보도를 충분히 확인하지 못했어요. 다른 기사로 대신 채우지 않았어요." });
         if (unavailable.error) throw unavailable.error;
         return { processed: true, status: unavailable.data ? "unavailable" : "superseded" };
       }

@@ -10,9 +10,9 @@ vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.Prop
 let CartoonPage: typeof import("../src/app/cartoon/page").default;
 beforeAll(async () => { vi.stubGlobal("React", React); CartoonPage = (await import("../src/app/cartoon/page")).default; });
 const date = "2026-11-04", today = "2026-11-25";
-const now = new Date("2026-11-25T10:00:00Z");
+const now = new Date("2026-11-25T13:00:00Z");
 function payload(overrides: Record<string, unknown> = {}) {
-  return { today, dates: [], enabled: true, canRequest: true, availableAt: `${date}T19:00:00+09:00`, cartoon: null, ...overrides };
+  return { today, dates: [], enabled: true, canRequest: true, availableAt: `${date}T22:00:00+09:00`, cartoon: null, ...overrides };
 }
 function setPayload(value: ReturnType<typeof payload>, overrides: Record<string, unknown> = {}) {
   mocks.hook.mockReturnValue({ payload: value, loading: false, posting: false, error: null, fetchedAt: now.getTime(), refresh: mocks.refresh, start: mocks.start, ...overrides });
@@ -78,9 +78,9 @@ describe("past-date cartoon screen", () => {
 
   test("today before publication time keeps the evening notice and no request button", () => {
     mocks.search.mockReturnValue(new URLSearchParams(`date=${today}`));
-    setPayload(payload({ canRequest: false, availableAt: `${today}T19:00:00+09:00` }), { fetchedAt: now.getTime() - 1000 });
+    setPayload(payload({ canRequest: false, availableAt: `${today}T22:00:00+09:00` }), { fetchedAt: now.getTime() - 1000 });
     const html = render();
-    expect(html).toContain("저녁 7시 이후에 만나요");
+    expect(html).toContain("밤 10시 이후에 만나요");
     expect(html).not.toContain("오늘의 만평 준비하기");
   });
 
@@ -98,7 +98,8 @@ describe("past-date cartoon screen", () => {
     setPayload(payload({ cartoon, canRequest: true }));
     const html = render();
     expect(html).toContain("선정할 뉴스를 확인하지 못했어요");
-    expect(html).toContain("뉴스를 다시 검색해 대표 뉴스를 선정할 수 있어요.");
+    expect(html).toContain("방송 선두 기사와 다른 매체의 보도를 다시 확인할 수 있어요.");
+    expect(html).toContain("근거가 부족하면 다른 기사로 대신 채우지 않아요.");
     expect(html).toContain("뉴스 다시 선정하기");
     expect(html).toContain("1 / 3회 사용");
     expect(mocks.start).not.toHaveBeenCalled();
@@ -118,6 +119,49 @@ describe("past-date cartoon screen", () => {
     expect(html).not.toContain("선택한 날짜에 나온 보도를 한국 시간");
     expect(html).toMatch(/<details[^>]*><summary>저장된 만평/);
     expect(html).not.toMatch(/<details[^>]*open/);
+    expect(html).not.toContain("방송 선두 배치 확인");
+  });
+
+  test.each([
+    // Match the archive reader's actual URL order, while retaining the reversed-order case below.
+    { publisher: "SBS", program: "SBS 8뉴스", url: "https://news.sbs.co.kr/news/programMain.do?prog_cd=R1&broad_date=20261104", rank: 1, order: "첫 번째" },
+    { publisher: "MBC", program: "MBC 뉴스데스크", url: "https://imnews.imbc.com/replay/2026/nwdesk/6863544_36999.html", rank: 2, order: "두 번째" },
+    { publisher: "SBS", program: "SBS 8뉴스", url: "https://news.sbs.co.kr/news/programMain.do?broad_date=20261104&prog_cd=R1", rank: 3, order: "세 번째" },
+  ])("shows the validated $program archive separately from the original article", ({ publisher, program, url, rank, order }) => {
+    const source = { title: "확인한 원문 기사", url: "https://news.example/article", publisher, publishedAt: `${date}T11:00:00+09:00`,
+      prominence: { kind: "broadcast_running_order", editionDate: date, program, url, rank } };
+    setPayload(payload({ canRequest: false, cartoon: { date, status: "ready", headline: "저장된 뉴스", sources: [source] } }));
+    const html = render();
+    expect(html).toContain(`href="${url.replaceAll("&", "&amp;")}"`);
+    expect(html).toContain(`${program} 기사 목록 · ${order} 보도`);
+    expect(html).toContain("방송 선두 배치 확인");
+    expect(html).not.toContain("전체 뉴스 첫 뉴스");
+    expect(html).toContain("확인한 원문 기사");
+    expect(html).toMatch(/<\/a><a[^>]+href="https:\/\/(?:news\.sbs\.co\.kr|imnews\.imbc\.com)/);
+  });
+
+  test.each([
+    { rank: 0 }, { rank: 4 }, { rank: 1.5 }, { rank: "1" },
+    { kind: "model_claim" }, { editionDate: "2026-11-05" }, { program: "unknown" },
+    { url: "javascript:alert(1)" },
+    { url: "https://news.sbs.co.kr.evil.test/news/programMain.do?broad_date=20261104&prog_cd=R1" },
+    { url: "http://news.sbs.co.kr/news/programMain.do?broad_date=20261104&prog_cd=R1" },
+    { url: "https://news.sbs.co.kr/news/programMain.do?broad_date=20261105&prog_cd=R1" },
+    { url: "https://news.sbs.co.kr/news/programMain.do?broad_date=20261104&prog_cd=R2" },
+    { url: "https://news.sbs.co.kr/news/programMain.do?prog_cd=R1&broad_date=20261104&broad_date=20261105" },
+    { url: "https://news.sbs.co.kr/news/programMain.do?prog_cd=R1&broad_date=20261104&extra=1" },
+    { url: "https://news.sbs.co.kr/news/programMain.do?prog_cd=R1&prog_cd=R1" },
+    { url: "https://news.sbs.co.kr/news/programMain.do?broad_date=20261104&prog_cd=R1#claim" },
+    { program: "MBC 뉴스데스크", url: "https://imnews.imbc.com/replay/2025/nwdesk/6863544_36999.html" },
+    { program: "MBC 뉴스데스크", url: "https://imnews.imbc.com/news/2026/society/article/6863544_36999.html" },
+  ])("hides invalid broadcast metadata while retaining the original source: %j", replacement => {
+    const source = { title: "기존 원문 기사", url: "https://news.example/article", publisher: replacement.program === "MBC 뉴스데스크" ? "MBC" : "SBS",
+      prominence: { kind: "broadcast_running_order", editionDate: date, program: "SBS 8뉴스", rank: 1,
+        url: "https://news.sbs.co.kr/news/programMain.do?broad_date=20261104&prog_cd=R1", ...replacement } };
+    setPayload(payload({ canRequest: false, cartoon: { date, status: "ready", headline: "뉴스", sources: [source] } }));
+    const html = render();
+    expect(html).not.toContain("방송 선두 배치 확인");
+    expect(html).toContain("기존 원문 기사");
   });
 
   test.each(["failed", "unavailable"])("a %s cooldown displays its exact retry time instead of a stale relative delay", status => {

@@ -14,7 +14,7 @@ import { cartoonCanRequest, cartoonPayload } from "../src/server/cartoons";
 import { cartoonJob, cartoonsGet, cartoonsPost } from "../src/server/cartoon-handlers";
 
 const date = "2026-11-25", origin = "http://127.0.0.1:3001";
-const now = new Date(`${date}T10:00:00Z`); // 19:00 KST
+const now = new Date(`${date}T13:00:00Z`); // 22:00 KST
 const cronSecret = "test-only-cron-secret-at-least-32-characters";
 type Row = Record<string, any>;
 function fixture() {
@@ -61,7 +61,7 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("cartoon request eligibility", () => {
-  test("opens today's edition at 19:00 and allows past but never future editions", () => {
+  test("opens today's edition at 22:00 and allows past but never future editions", () => {
     expect(cartoonCanRequest(null, date, new Date(now.getTime() - 1))).toBe(false);
     expect(cartoonCanRequest(null, date, now)).toBe(true);
     expect(cartoonCanRequest(null, "2026-11-24", now)).toBe(true);
@@ -123,7 +123,7 @@ describe("cartoon API boundaries and background scheduling", () => {
     expect(mocks.enqueue).not.toHaveBeenCalled(); expect(mocks.after).not.toHaveBeenCalled();
   });
 
-  test("POST before 19:00 KST is a 409 with no job or background work", async () => {
+  test("POST before 22:00 KST is a 409 with no job or background work", async () => {
     vi.setSystemTime(new Date(now.getTime() - 1));
     expect((await post()).status).toBe(409);
     expect(mocks.enqueue).not.toHaveBeenCalled(); expect(mocks.after).not.toHaveBeenCalled();
@@ -228,6 +228,15 @@ describe("cartoon public DTO", () => {
     expect(payload.cartoon).toMatchObject({ status: "ready", imageUrl: null, imageError: true });
   });
 
+  test("a saved edition and its public broadcast evidence remain readable before today's opening", async () => {
+    vi.setSystemTime(new Date(`${date}T10:00:00Z`));
+    const sources = [{ ...newsSources()[0], prominence: { kind: "broadcast_running_order", program: "SBS 8뉴스", editionDate: date, rank: 1,
+      url: "https://news.sbs.co.kr/news/programMain.do?broad_date=20261125&prog_cd=R1" } }];
+    f.setRow({ cartoon_date: date, status: "ready", attempts: 1, sources });
+    expect(await (await get()).json()).toMatchObject({ canRequest: false, availableAt: `${date}T22:00:00+09:00`, cartoon: { status: "ready", sources } });
+    expect(mocks.enqueue).not.toHaveBeenCalled(); expect(mocks.worker).not.toHaveBeenCalled();
+  });
+
   test("image signing is restricted to the requested edition's storage prefix", async () => {
     f.setRow({ cartoon_date: date, status: "ready", image_path: "another-date/private.png", attempts: 1 });
     expect((await cartoonPayload(f.admin as never, date, now)).cartoon).toMatchObject({ imageUrl: null, imageError: true });
@@ -249,6 +258,13 @@ describe("cartoon public DTO", () => {
 function newsSources() { return [{ title: "확인한 뉴스", url: "https://example.test/news", publishedAt: now.toISOString() }]; }
 
 describe("cartoon cron authorization", () => {
+  test("an authorized early cron cannot enqueue work or consume attempts before 22:00 KST", async () => {
+    vi.setSystemTime(new Date(now.getTime() - 1));
+    const response = await cron(`Bearer ${cronSecret}`);
+    expect(response.status).toBe(200); expect(await response.json()).toEqual({ processed: false, status: "not_due" });
+    expect(mocks.enqueue).not.toHaveBeenCalled(); expect(mocks.worker).not.toHaveBeenCalled();
+    expect(mocks.adminClient).not.toHaveBeenCalled();
+  });
   test("missing, wrong or insufficiently long secrets cannot start work", async () => {
     for (const header of [undefined, "Bearer wrong", `bearer ${cronSecret}`]) expect((await cron(header)).status).toBe(401);
     vi.stubEnv("CRON_SECRET", "short"); expect((await cron("Bearer short")).status).toBe(401);

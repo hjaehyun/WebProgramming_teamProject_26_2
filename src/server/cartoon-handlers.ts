@@ -23,7 +23,7 @@ export function cartoonsPost(request: Request) { return run(async () => {
   const date = input.date ?? seoulDate();
   if (date > seoulDate()) throw new HttpError(400, "아직 오지 않은 날짜예요.");
   if (!cartoonsEnabled()) throw new HttpError(503, "하루만평 연결을 준비하고 있어요.");
-  if (Date.now() < Date.parse(cartoonAvailableAt(date))) throw new HttpError(409, "오늘의 만평은 저녁 7시 이후에 준비돼요.");
+  if (Date.now() < Date.parse(cartoonAvailableAt(date))) throw new HttpError(409, "오늘의 만평은 저녁 주요 보도가 모인 밤 10시 이후에 준비돼요.");
   await enqueueCartoon(date);
   const payload = await cartoonPayload(adminClient(), date);
   if (payload.canRequest) after(async () => {
@@ -42,6 +42,7 @@ export async function cartoonJob(request: Request) {
   if (!cartoonsEnabled()) return json({ error: "Daily cartoon is disabled" }, 503);
   try {
     const date = seoulDate();
+    if (Date.now() < Date.parse(cartoonAvailableAt(date))) return json({ processed: false, status: "not_due" });
     await enqueueCartoon(date);
     return json(await processDailyCartoon(date));
   } catch {
