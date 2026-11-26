@@ -5,8 +5,7 @@ export const STYLES = [
   { id: "pencil", label: "색연필", particle: "로", desc: "사각사각 선", sample: "park" },
   { id: "crayon", label: "크레파스", particle: "로", desc: "꾹꾹 눌러 칠한", sample: "cafe" },
   { id: "story", label: "동화책", particle: "으로", desc: "포근한 밤 장면", sample: "night" },
-  // Temporary sample until a real anime-style picture replaces it.
-  { id: "anime", label: "애니 풍경", particle: "으로", desc: "손으로 칠한 듯한 하늘과 초록", sample: "park" },
+  { id: "anime", label: "애니 풍경", particle: "으로", desc: "손으로 칠한 듯한 하늘과 초록", sample: "anime" },
 ];
 
 export function styleOf(id) {
