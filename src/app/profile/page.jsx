@@ -189,9 +189,10 @@ function Profile() {
                 <span id="art-appearance-hint" className={s.fieldHint}>특징은 쉼표로 나눠 적어주세요. 줄바꿈은 띄어쓰기로 바뀌어요.</span>
               </label>
               <div className={s.applyBox}>
-                <label className={s.applyToggle} htmlFor="art-profile-enabled"><input id="art-profile-enabled" type="checkbox" checked={artProfileEnabled} disabled={!consent || saving} onChange={event => setArtProfileEnabled(event.target.checked)} aria-describedby="art-profile-explanation" /><span>내 그림에 반영하기</span></label>
-                <p id="art-profile-explanation">켜면 입력한 정보를 OpenAI로 보내 내 그림을 그릴 때 참고해요. 저장 후 새로 요청하거나 다시 그리는 그림부터 적용돼요. 이미 완성된 그림은 바뀌지 않아요.</p>
-                {!consent && <p className={s.consentHint}>아래 AI 전송 동의에 체크하면 켤 수 있어요.</p>}
+                <label className={s.applyToggle} htmlFor="art-profile-enabled"><input id="art-profile-enabled" type="checkbox" checked={artProfileEnabled} disabled={!consent || saving} onChange={event => setArtProfileEnabled(event.target.checked)} aria-describedby="art-profile-status art-profile-explanation" /><span>내 그림에 반영하기</span></label>
+                <p id="art-profile-status" className={s.applyStatus} role="status"><strong>{consent && artProfileEnabled ? "반영 켜짐" : "반영 꺼짐"}</strong>{consent && artProfileEnabled ? "저장하면 새로 만들거나 다시 그리는 그림부터 적용해요." : "현재 성별·외형 정보는 그림에 반영되지 않아요."}</p>
+                <p id="art-profile-explanation">켜면 입력한 정보를 OpenAI로 보내 내 그림을 그릴 때 참고해요. 이미 완성된 그림은 자동으로 바뀌지 않아요.</p>
+                {(!consent || !artProfileEnabled) && <p className={s.consentHint}>{consent ? "성별 선택만으로는 반영되지 않아요. 위의 ‘내 그림에 반영하기’를 켜고 저장해 주세요." : "반영하려면 아래 ‘AI 전송에 동의해요’를 선택한 뒤, 위의 ‘내 그림에 반영하기’도 켜고 저장해 주세요."}</p>}
               </div>
               <p className={s.detailsNote}>입력한 프로필 항목은 공개 전시에 표시되지 않아요. 전시를 공개하면 이 모습이 반영된 그림은 다른 사람도 볼 수 있어요.</p>
             </section>

@@ -60,6 +60,8 @@
 .applyBox { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
 .applyToggle { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 14px; font-weight: 600; }
 .applyToggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.applyBox .applyStatus { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 8px; background: var(--soft); color: var(--ink-2); }
+.applyStatus strong { color: var(--ink); font-size: 13px; }
 .applyBox .consentHint { color: var(--accent-ink); }
 .consentBox { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .optional { color: var(--muted); font-size: 12px; font-weight: 400; }

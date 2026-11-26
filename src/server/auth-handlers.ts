@@ -8,6 +8,16 @@ import { clearRecovery,requireRecovery } from "./recovery";
 import { artProfileSchema } from "./core/art-profile";
 
 const credentials=z.object({email:z.string().trim().pipe(z.email()),password:z.string().min(8).max(128)});
+const confirmationEmail = z.object({email:z.string().trim().max(254).pipe(z.email())});
+// Supabase enforces the send limit. Retry-After is a minimum wait, not a promise of delivery.
+function confirmationFailure(error:{status?:number;code?:string}) {
+  if(error.status===429 || error.code==="over_email_send_rate_limit" || error.code==="over_request_rate_limit") {
+    const response=json({error:"인증 메일을 너무 자주 요청했어요. 1분 이상 기다린 뒤 다시 시도해 주세요. 제한이 계속되면 조금 더 기다려 주세요.",retryAfterSeconds:60},429);
+    response.headers.set("Retry-After","60");
+    return response;
+  }
+  throw new HttpError(503,"인증 메일 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.");
+}
 export function auth(request: Request, mode: "signup"|"login"|"logout") { return run(async()=>{
   mutation(request); if(!configured()) throw new HttpError(503,"서비스 연결 설정이 필요해요.");
   const db=await userClient();
@@ -16,13 +26,24 @@ export function auth(request: Request, mode: "signup"|"login"|"logout") { return
   if(mode==="signup") {
     const origin=process.env.APP_URL; if(!origin) throw new HttpError(503,"인증 주소 설정이 필요해요.");
     const {data,error}=await db.auth.signUp({...input,options:{emailRedirectTo:new URL("/auth/callback",origin).href}});
-    if(error) throw new HttpError(error.status===429?429:503,"가입 인증을 진행하지 못했어요. 잠시 후 다시 시도해 주세요. 계속되면 메일 발송 설정을 확인해 주세요.");
+    if(error) return confirmationFailure(error);
     return json({ok:true,confirm:!data.session});
   }
   await clearRecovery();
   const {error}=await db.auth.signInWithPassword(input);
   if(error) throw new HttpError(401,"이메일·비밀번호와 이메일 인증 상태를 확인해 주세요.");
   return json({ok:true});
+}); }
+export function resendConfirmation(request:Request) { return run(async()=>{
+  mutation(request);if(!configured()) throw new HttpError(503,"서비스 연결 설정이 필요해요.");
+  const {email}=confirmationEmail.parse(await body(request));
+  const origin=process.env.APP_URL;if(!origin) throw new HttpError(503,"인증 주소 설정이 필요해요.");
+  const db=await userClient();
+  // The provider deliberately returns the same success for missing or confirmed users.
+  // Never look up a public caller's email with the admin client to distinguish those cases.
+  const {error}=await db.auth.resend({type:"signup",email,options:{emailRedirectTo:new URL("/auth/callback",origin).href}});
+  if(error) return confirmationFailure(error);
+  return json({message:"인증이 필요한 가입 요청이라면 메일을 다시 요청했어요. 스팸함과 입력한 주소를 확인해 주세요. 이미 인증했다면 로그인해 주세요.",retryAfterSeconds:60});
 }); }
 export function me() { return run(async()=>{const {db,user,profile}=await authenticated(true);return json(await dashboard(db,user,profile));}); }
 export function profilePut(request:Request) { return run(async()=>{
