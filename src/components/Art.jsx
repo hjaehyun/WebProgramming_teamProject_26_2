@@ -7,6 +7,8 @@ const LABELS = {
   park: "공원의 나무",
   cafe: "따뜻한 커피 한 잔",
   night: "달 뜬 밤의 동네",
+  // Style picker sample only; the AI never picks it as a day's scene.
+  anime: "뭉게구름 아래 언덕길과 큰 나무",
 };
 
 export function sceneSrc(scene) {
