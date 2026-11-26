@@ -1,4 +1,5 @@
 .detail { display: contents; }
+.artColumn, .journalColumn { display: contents; }
 .main { padding: 8px 16px 20px; display: flex; flex-direction: column; gap: 18px; }
 .figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .frame { border-radius: 16px; overflow: hidden; display: block; box-shadow: 0 6px 20px rgba(35, 33, 29, 0.10); }
@@ -69,3 +70,17 @@
 .invalidDay { padding: 32px 24px; text-align: center; }
 .invalidDay h2 { margin: 0 0 12px; font-size: 20px; }
 .invalidDay p { margin: 0 0 24px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+/* The same mounted editor becomes two columns only after choosing PC view. */
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .main { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; gap: 32px; padding: 12px 32px 32px; }
+  :global([data-layout="desktop"]) .artColumn,
+  :global([data-layout="desktop"]) .journalColumn { display: flex; flex-direction: column; min-width: 0; gap: 20px; }
+  :global([data-layout="desktop"]) .figure { gap: 12px; }
+  :global([data-layout="desktop"]) .entries { gap: 16px; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+  :global([data-layout="desktop"]) .entries h2 { margin-bottom: 4px; font-size: 17px; }
+  :global([data-layout="desktop"]) .summary { line-height: 1.85; }
+  :global([data-layout="desktop"]) .emptyDay { min-height: 340px; display: flex; flex-direction: column; justify-content: center; }
+  :global([data-layout="desktop"]) .actions { justify-content: flex-end; padding: 16px 32px; }
+  :global([data-layout="desktop"]) .actions > :global(.btn) { max-width: 280px; }
+}

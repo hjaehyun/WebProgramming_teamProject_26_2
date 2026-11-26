@@ -126,7 +126,8 @@ function Profile() {
 
       <main className={`scroll ${s.main}`}>
         {step !== "style" ? (
-          <div className={s.section}>
+          <div className={`${s.section} ${s.detailsSection}`}>
+            <div className={s.identity}>
             <div className={s.title}>
               {editing ? (
                 <>
@@ -160,6 +161,7 @@ function Profile() {
               />
               <span className={s.count}>{nick.length}/12</span>
             </label>
+            </div>
             <section className={s.artProfile} aria-labelledby="art-profile-title" id="art-profile">
               <div className={s.detailsTitle}>
                 <h2 id="art-profile-title">그림에 담을 내 모습 <span>선택 입력</span></h2>

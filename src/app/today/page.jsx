@@ -163,6 +163,7 @@ function Today() {
       </header>
 
       <main ref={feed} className={`scroll ${s.feed}`}>
+        <div className={s.journal}>
         <div className={s.divider}>{longDate(date)}</div>
 
         {n === 0 && stage === 0 && (
@@ -212,7 +213,15 @@ function Today() {
             </div>
           );
         })}
+        </div>
 
+        <aside className={s.outcome} aria-label="오늘의 그림과 연결">
+        <div className={s.desktopNote}>
+          <span className="eyebrow">하루를 한 장으로</span>
+          <h2 className="hand">작은 순간들이 모여<br />나의 그림이 돼요</h2>
+          <p>{stage === 0 ? "생각난 순간을 아래 입력창에 남겨보세요. 하루를 마감하면 모은 조각들이 한 장의 그림으로 이어져요." : "남겨둔 조각과 그림의 상태를 함께 살펴보세요. 갤러리에서 이 날짜의 기록을 이어 볼 수 있어요."}</p>
+          <div className={s.daySummary}><strong>{n}</strong><span>오늘 모은 조각</span></div>
+        </div>
         {stage > 0 && stage < 3 && (
           <div className={`${s.drawing} pop`} aria-live="polite">
             <strong>오늘의 그림을 그리고 있어요</strong>
@@ -248,6 +257,7 @@ function Today() {
         {(n > 0 || draft.trim()) && <button type="button" className="btn ghost" onClick={openConnection} disabled={connecting || requesting || !!(draft.trim() && stage > 0 && stage < 3) || !!(editingId && !draft.trim())}>
           {connecting ? "조각을 저장하고 있어요…" : draft.trim() && stage > 0 && stage < 3 ? "그림 완성 후 조각을 저장해 주세요" : draft.trim() ? "조각 저장하고 하루연결 보기" : "하루연결 · 내 기록과 닿은 뉴스"}
         </button>}
+        </aside>
       </main>
 
       {stage === 0 && n > 0 && !editingId && (

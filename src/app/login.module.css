@@ -25,3 +25,16 @@
 .google { background: #FFFFFF; color: #1F1F1F; border: 1px solid #747775; }
 .legal { margin: 4px 0 0; text-align: center; font-size: 11px; line-height: 1.5; color: var(--faint, var(--muted)); }
 .legal a { color: var(--muted); text-decoration: underline; }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .wrap {
+    display: grid; grid-template-columns: minmax(240px, 1fr) minmax(300px, 400px);
+    gap: clamp(32px, 5vw, 96px); align-items: center; padding: 48px clamp(32px, 4vw, 72px);
+  }
+  :global([data-layout="desktop"]) .hero { min-height: 420px; gap: 40px; }
+  :global([data-layout="desktop"]) .logo { width: 180px; gap: 9px; }
+  :global([data-layout="desktop"]) .tile { height: 56px; border-radius: 12px; }
+  :global([data-layout="desktop"]) .copy h1 { font-size: 72px; }
+  :global([data-layout="desktop"]) .copy p { font-size: 18px; line-height: 1.8; }
+  :global([data-layout="desktop"]) .form { padding: 28px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); gap: 16px; }
+}

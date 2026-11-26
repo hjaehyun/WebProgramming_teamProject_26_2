@@ -30,3 +30,19 @@
 .add { aspect-ratio: 1; border: 2px dashed #C9C2B5; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-decoration: none; color: var(--ink-2); font-size: 13px; font-weight: 500; }
 
 .preview { min-height: 56px; padding: 0 16px; border-radius: 14px; background: var(--dark); color: #F2EFE9; display: flex; align-items: center; justify-content: space-between; text-decoration: none; font-size: 14px; font-weight: 500; }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-auto-rows: max-content; align-content: start; align-items: start; gap: 28px; padding: 36px 32px; }
+  :global([data-layout="desktop"]) .title { gap: 12px; padding: 0; }
+  :global([data-layout="desktop"]) .title h1 { font-size: 48px; }
+  :global([data-layout="desktop"]) .title p { line-height: 1.8; }
+  :global([data-layout="desktop"]) .vis { padding: 20px; }
+  :global([data-layout="desktop"]) .works { grid-column: 1 / -1; gap: 20px; padding-top: 8px; }
+  :global([data-layout="desktop"]) .worksHead { padding: 0; }
+  :global([data-layout="desktop"]) .worksHead h2 { font-size: 18px; }
+  :global([data-layout="desktop"]) .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
+  :global([data-layout="desktop"]) .work { gap: 12px; }
+  :global([data-layout="desktop"]) .work figcaption { gap: 4px; font-size: 13px; }
+  :global([data-layout="desktop"]) .work figcaption :global(.hand) { font-size: 22px; }
+  :global([data-layout="desktop"]) .preview { grid-column: 1 / -1; justify-self: end; min-width: 320px; gap: 28px; }
+}

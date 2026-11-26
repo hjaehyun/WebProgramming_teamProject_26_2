@@ -104,3 +104,44 @@
 @keyframes breathe { 50% { opacity: .4; transform: scale(.92); } }
 @media (max-width: 360px) { .paper { padding-left: 12px; padding-right: 12px; } .titleRow h1 { font-size: 40px; } .picturePanel { padding: 6px; } .panelHeading h3 { font-size: 11px; } .comparing { gap: 7px; } }
 @media (prefers-reduced-motion: reduce) { .working .emptyMark { animation: none; } }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .paper { padding: 32px clamp(28px, 3vw, 52px) 40px; }
+  :global([data-layout="desktop"]) .nameplate { font-size: 11px; }
+  :global([data-layout="desktop"]) .titleRow h1 { font-size: 58px; }
+  :global([data-layout="desktop"]) .sections { max-width: 520px; margin-top: 12px; }
+  :global([data-layout="desktop"]) .editionRow { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px 0; }
+  :global([data-layout="desktop"]) .editionTag { font-size: 12px; }
+  :global([data-layout="desktop"]) .dateForm { width: min(100%, 430px); margin: 0; }
+  :global([data-layout="desktop"]) .archive { flex-basis: 100%; }
+  :global([data-layout="desktop"]) .archivePicker { max-width: 430px; }
+  :global([data-layout="desktop"]) .dateHelp { margin: 0; font-size: 12px; }
+  :global([data-layout="desktop"]) .lead { padding: 28px 0 20px; }
+  :global([data-layout="desktop"]) .lead h2 { max-width: 900px; font-size: 32px; }
+  :global([data-layout="desktop"]) .leadNote { font-size: 13px; }
+  :global([data-layout="desktop"]) .viewModes { max-width: 460px; margin-bottom: 20px; }
+  :global([data-layout="desktop"]) .viewModes button { min-height: 42px; font-size: 13px; }
+  :global([data-layout="desktop"]) .pictures { max-width: 620px; margin-inline: auto; }
+  :global([data-layout="desktop"]) .comparing { max-width: none; gap: 24px; }
+  :global([data-layout="desktop"]) .picturePanel { padding: 16px; }
+  :global([data-layout="desktop"]) .panelHeading { margin-bottom: 12px; }
+  :global([data-layout="desktop"]) .panelHeading h3 { font-size: 16px; }
+  :global([data-layout="desktop"]) .picturePanel figcaption { font-size: 14px; }
+  :global([data-layout="desktop"]) .picturePanel figcaption span,
+  :global([data-layout="desktop"]) .personalLink { font-size: 12px; }
+  :global([data-layout="desktop"]) .emptyPicture { min-height: 320px; padding: 28px; }
+  :global([data-layout="desktop"]) .emptyPicture strong { font-size: 16px; }
+  :global([data-layout="desktop"]) .emptyPicture p { font-size: 13px; }
+  :global([data-layout="desktop"]) .emptyPicture a,
+  :global([data-layout="desktop"]) .emptyPicture button { min-height: 44px; padding: 10px 14px; font-size: 13px; }
+  :global([data-layout="desktop"]) .comparisonNote { margin: 20px 0 28px; font-size: 13px; }
+  :global([data-layout="desktop"]) .article { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+  :global([data-layout="desktop"]) .articleBlock { padding: 24px 0; }
+  :global([data-layout="desktop"]) .articleBlock h3 { font-size: 16px; }
+  :global([data-layout="desktop"]) .articleBlock p { font-size: 15px; }
+  :global([data-layout="desktop"]) .selection { grid-column: 1 / -1; padding: 20px; }
+  :global([data-layout="desktop"]) .selection p { font-size: 14px; }
+  :global([data-layout="desktop"]) .sources ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+  :global([data-layout="desktop"]) .sourceTitle { font-size: 14px; }
+  :global([data-layout="desktop"]) .colophon p { font-size: 11px; }
+}

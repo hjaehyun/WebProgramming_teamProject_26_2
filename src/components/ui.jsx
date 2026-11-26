@@ -90,10 +90,10 @@ const TABS = [
   },
 ];
 
-export function BottomNav() {
+export function MainNavLinks() {
   const path = usePathname();
   return (
-    <nav className="nav" aria-label="주 메뉴">
+    <>
       {TABS.map((t) => (
         <Link key={t.href} href={t.href} aria-current={(t.routes ?? [t.href]).some(route => path === route || path.startsWith(`${route}/`)) ? "page" : undefined}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -102,8 +102,12 @@ export function BottomNav() {
           {t.label}
         </Link>
       ))}
-    </nav>
+    </>
   );
+}
+
+export function BottomNav() {
+  return <nav className="nav" aria-label="주 메뉴"><MainNavLinks /></nav>;
 }
 
 /** Wraps signed-in screens: waits for the store, sends users without a profile to setup. */

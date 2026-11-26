@@ -22,3 +22,15 @@
 .foot { flex-shrink: 0; padding: 16px 28px 28px; border-top: 1px solid #3A3943; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .foot .hand { font-size: 22px; font-weight: 700; }
 .foot a { height: 44px; padding: 0 18px; border-radius: 22px; background: #F2EFE9; color: var(--dark); display: flex; align-items: center; text-decoration: none; font-size: 14px; font-weight: 700; }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .head { padding: 28px 40px 12px; }
+  :global([data-layout="desktop"]) .head h1 { font-size: 48px; }
+  :global([data-layout="desktop"]) .main { padding: 24px 40px 36px; align-items: center; justify-content: flex-start; gap: 24px; }
+  :global([data-layout="desktop"]) .main > * { width: 100%; max-width: 580px; }
+  :global([data-layout="desktop"]) .figure { gap: 20px; }
+  :global([data-layout="desktop"]) .mat { padding: 24px; }
+  :global([data-layout="desktop"]) .foot { padding: 20px 40px; }
+  :global([data-layout="desktop"]) .ownerBar { margin-left: 40px; }
+  :global([data-layout="desktop"]) .privateNote { margin-inline: 40px; }
+}
