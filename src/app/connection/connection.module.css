@@ -130,3 +130,49 @@
 @keyframes breathe { 50% { box-shadow: 0 0 0 4px #485f9c18; } }
 @media (max-width: 360px) { .paper { padding-left: 12px; padding-right: 12px; } .titleRow h1 { font-size: 39px; } .requestCard { padding: 13px; } .panel { padding: 6px; } .comparing { gap: 7px; } .panelHeading h3 { font-size: 11px; } }
 @media (prefers-reduced-motion: reduce) { .activeStep > span { animation: none; } }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .paper { padding: 32px clamp(28px, 3vw, 52px) 40px; }
+  :global([data-layout="desktop"]) .overline { font-size: 11px; }
+  :global([data-layout="desktop"]) .titleRow h1 { font-size: 56px; }
+  :global([data-layout="desktop"]) .sections { max-width: 520px; margin-top: 12px; }
+  :global([data-layout="desktop"]) .dateCard { max-width: 620px; margin-top: 24px; }
+  :global([data-layout="desktop"]) .dateCard label,
+  :global([data-layout="desktop"]) .dateCard p { font-size: 13px; }
+  :global([data-layout="desktop"]) .requestCard { max-width: 720px; padding: 24px; }
+  :global([data-layout="desktop"]) .requestCard h2 { font-size: 24px; }
+  :global([data-layout="desktop"]) .requestCard p { font-size: 14px; }
+  :global([data-layout="desktop"]) .storyLead { margin-top: 28px; }
+  :global([data-layout="desktop"]) .storyLead h2 { max-width: 900px; font-size: 32px; }
+  :global([data-layout="desktop"]) .sectionHeading h2 { font-size: 20px; }
+  :global([data-layout="desktop"]) .viewModes { max-width: 460px; margin-bottom: 20px; }
+  :global([data-layout="desktop"]) .viewModes button { min-height: 42px; font-size: 13px; }
+  :global([data-layout="desktop"]) .pictures { max-width: 620px; margin-inline: auto; }
+  :global([data-layout="desktop"]) .comparing { max-width: none; gap: 24px; }
+  :global([data-layout="desktop"]) .panel { padding: 16px; }
+  :global([data-layout="desktop"]) .panelHeading { margin-bottom: 12px; }
+  :global([data-layout="desktop"]) .panelHeading h3 { font-size: 16px; }
+  :global([data-layout="desktop"]) .panel figcaption { font-size: 14px; }
+  :global([data-layout="desktop"]) .panel figcaption > span,
+  :global([data-layout="desktop"]) .inlineLink { font-size: 12px; }
+  :global([data-layout="desktop"]) .emptyPicture,
+  :global([data-layout="desktop"]) .diaryPreview { min-height: 320px; padding: 28px; }
+  :global([data-layout="desktop"]) .emptyPicture strong,
+  :global([data-layout="desktop"]) .diaryPreview strong { font-size: 16px; }
+  :global([data-layout="desktop"]) .emptyPicture p,
+  :global([data-layout="desktop"]) .diaryPreview p { font-size: 14px; }
+  :global([data-layout="desktop"]) .emptyPicture button { min-height: 44px; padding: 10px 14px; font-size: 13px; }
+  :global([data-layout="desktop"]) .topics { font-size: 12px; }
+  :global([data-layout="desktop"]) .article { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 28px; margin-top: 28px; padding-top: 24px; }
+  :global([data-layout="desktop"]) .articleKicker,
+  :global([data-layout="desktop"]) .article > h2,
+  :global([data-layout="desktop"]) .reason { grid-column: 1 / -1; }
+  :global([data-layout="desktop"]) .articleBlock { padding-top: 0; }
+  :global([data-layout="desktop"]) .reason h3,
+  :global([data-layout="desktop"]) .articleBlock h3 { font-size: 16px; }
+  :global([data-layout="desktop"]) .reason p,
+  :global([data-layout="desktop"]) .articleBlock p { font-size: 15px; }
+  :global([data-layout="desktop"]) .sources ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+  :global([data-layout="desktop"]) .sourceTitle { font-size: 14px; }
+  :global([data-layout="desktop"]) .footer p { font-size: 11px; }
+}

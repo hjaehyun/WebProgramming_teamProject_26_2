@@ -9,3 +9,8 @@
 .table { width: 100%; margin: 4px 0 8px; border-collapse: collapse; font-size: 13px; }
 .table th, .table td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .table th { color: var(--ink); font-weight: 600; white-space: nowrap; }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .main { width: 100%; max-width: 840px; margin: 0 auto; padding: 24px 40px 48px; font-size: 15px; line-height: 1.9; }
+  :global([data-layout="desktop"]) .main h2 { font-size: 19px; margin-top: 36px; }
+}

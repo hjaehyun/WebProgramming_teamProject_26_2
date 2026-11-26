@@ -42,6 +42,7 @@ function Gallery({ month, today }) {
   return (
     <>
       <main className={`scroll ${s.main}`}>
+        <section className={s.calendarPanel} aria-label="날짜별 기록">
         <div className={s.monthHead}>
           <h1 className="hand">
             {year}년 {monthNumber}월
@@ -93,6 +94,8 @@ function Gallery({ month, today }) {
           })}
         </div>
 
+        </section>
+        <div className={s.discoveryPanel}>
         <Link href="/curator" className={s.curator}>
           <span className={s.curatorIcon}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -132,6 +135,7 @@ function Gallery({ month, today }) {
             ))}
           </div>
         </section>
+        </div>
       </main>
       <BottomNav />
     </>

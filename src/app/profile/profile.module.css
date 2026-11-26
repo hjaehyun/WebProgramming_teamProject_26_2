@@ -65,3 +65,23 @@
 .optional { color: var(--muted); font-size: 12px; font-weight: 400; }
 .actions { flex-shrink: 0; }
 .saveError { margin: 0 0 12px; color: var(--danger); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.identity { display: contents; }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .head { height: 64px; padding: 12px 32px 0; }
+  :global([data-layout="desktop"]) .main { width: 100%; max-width: 1120px; margin: 0 auto; padding: 28px 32px 40px; }
+  :global([data-layout="desktop"]) .section { gap: 28px; }
+  :global([data-layout="desktop"]) .detailsSection { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); column-gap: 40px; align-items: start; }
+  :global([data-layout="desktop"]) .identity { min-width: 0; display: flex; flex-direction: column; gap: 28px; }
+  :global([data-layout="desktop"]) .title h1 { font-size: 42px; }
+  :global([data-layout="desktop"]) .title p { line-height: 1.8; }
+  :global([data-layout="desktop"]) .detailsSection .artProfile { min-width: 0; margin: 0; padding: 24px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+  :global([data-layout="desktop"]) .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  :global([data-layout="desktop"]) .pick { padding: 12px; gap: 12px; }
+  :global([data-layout="desktop"]) .pickText { gap: 5px; }
+  :global([data-layout="desktop"]) .pickText strong { font-size: 16px; }
+  :global([data-layout="desktop"]) .nameCard { max-width: 420px; }
+  :global([data-layout="desktop"]) .consentBox { margin-top: 28px; padding: 20px 24px; }
+  :global([data-layout="desktop"]) .actions { padding: 16px 32px 20px; display: flex; flex-direction: column; align-items: flex-end; }
+  :global([data-layout="desktop"]) .actions > button { max-width: 360px; }
+}
