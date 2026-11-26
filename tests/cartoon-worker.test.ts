@@ -8,7 +8,7 @@ vi.mock("../src/server/cartoon-news", () => ({ selectCartoonNews: dependencies.s
 import { CARTOON_BUCKET, processDailyCartoon } from "../src/server/cartoons";
 
 const date = "2026-11-25";
-const now = new Date(`${date}T10:00:00Z`);
+const now = new Date(`${date}T13:00:00Z`);
 const news = { headline: "공개 뉴스 제목", summary: "확인한 공개 뉴스의 요약", selectionReason: "여러 출처에서 확인한 소식", caption: "만평 해설", imagePrompt: "An editorial illustration", selectedAt: now.toISOString(), sources: [{ title: "출처 기사", url: "https://example.test/news", publishedAt: now.toISOString() }] };
 type Row = Record<string, unknown> & { cartoon_date: string; status: string; claim_token: string; image_path: string | null; image_prompt: string | null; attempts: number };
 type Options = {
@@ -79,6 +79,31 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("shared cartoon worker and fenced persistence", () => {
+  test("an early direct worker call stops before a claim, including explicit reselection", async () => {
+    const f = fixture();
+    vi.setSystemTime(new Date(now.getTime() - 1));
+    expect(await processDailyCartoon(date)).toEqual({ processed: false, status: "not_due" });
+    expect(await processDailyCartoon(date, true)).toEqual({ processed: false, status: "not_due" });
+    expect(dependencies.adminClient).not.toHaveBeenCalled(); expect(f.db.rpc).not.toHaveBeenCalled();
+    expect(dependencies.selectCartoonNews).not.toHaveBeenCalled(); expect(dependencies.illustrate).not.toHaveBeenCalled();
+  });
+
+  test("past editions can still be processed before today's opening", async () => {
+    const f = fixture();
+    vi.setSystemTime(new Date("2026-11-26T00:00:00Z"));
+    expect(await processDailyCartoon(date)).toEqual({ processed: true, status: "ready" });
+    expect(f.db.rpc).toHaveBeenCalledWith("claim_daily_cartoon", { p_date: date });
+  });
+
+  test("broadcast prominence metadata is preserved at the news checkpoint", async () => {
+    const f = fixture();
+    const sources = [{ ...news.sources[0], prominence: { kind: "broadcast_running_order", program: "SBS 8뉴스", editionDate: date, rank: 1,
+      url: "https://news.sbs.co.kr/news/programMain.do?broad_date=20261125&prog_cd=R1" } }];
+    dependencies.selectCartoonNews.mockResolvedValue({ ...news, sources });
+    expect(await processDailyCartoon(date)).toEqual({ processed: true, status: "ready" });
+    expect(f.row.sources).toEqual(sources);
+  });
+
   test("selects public news, checkpoints it, then stores one image in its token-specific path", async () => {
     const f = fixture();
     expect(await processDailyCartoon(date)).toEqual({ processed: true, status: "ready" });

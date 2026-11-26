@@ -16,6 +16,25 @@ function sourceUrl(value) {
   try { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) ? url.href : null; }
   catch { return null; }
 }
+function broadcastEvidence(source, date) {
+  const evidence = source.prominence;
+  if (!evidence || evidence.kind !== "broadcast_running_order" || evidence.editionDate !== date
+    || !Number.isInteger(evidence.rank) || evidence.rank < 1 || evidence.rank > 3 || typeof evidence.url !== "string") return null;
+  try {
+    const url = new URL(evidence.url);
+    if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash || /[\\\s]/.test(evidence.url)) return null;
+    if (evidence.program === "SBS 8뉴스") {
+      const keys = [...url.searchParams.keys()];
+      if (source.publisher !== "SBS" || url.hostname !== "news.sbs.co.kr" || url.pathname !== "/news/programMain.do"
+        || keys.length !== 2 || keys.some(key => !["broad_date", "prog_cd"].includes(key))
+        || url.searchParams.get("broad_date") !== date.replaceAll("-", "") || url.searchParams.get("prog_cd") !== "R1") return null;
+    } else if (evidence.program === "MBC 뉴스데스크") {
+      if (source.publisher !== "MBC" || url.hostname !== "imnews.imbc.com" || url.search
+        || !new RegExp(`^/replay/${date.slice(0, 4)}/nwdesk/[0-9]+_[0-9]+\\.html$`).test(url.pathname)) return null;
+    } else return null;
+    return { url: url.href, label: `${evidence.program} 기사 목록 · ${["첫 번째", "두 번째", "세 번째"][evidence.rank - 1]} 보도` };
+  } catch { return null; }
+}
 function timestamp(value) {
   const date = new Date(value);
   return value && Number.isFinite(date.getTime())
@@ -57,7 +76,7 @@ function Edition({ requestedDate, today, autoRequested }) {
   const dates = [...new Set(payload?.dates ?? [])].filter(day => validDate(day) && day <= today).sort().reverse();
   const canRequest = date <= today && payload?.enabled && payload?.canRequest;
   const chooseDate = day => { if (validDate(day) && day <= today) router.replace(`/cartoon?date=${encodeURIComponent(day)}`, { scroll: false }); };
-  const sources = (cartoon?.sources ?? []).map(source => ({ ...source, href: sourceUrl(source.url) })).filter(source => source.href);
+  const sources = (cartoon?.sources ?? []).map(source => ({ ...source, href: sourceUrl(source.url), broadcast: broadcastEvidence(source, date) })).filter(source => source.href);
   const selectedAt = timestamp(cartoon?.selectedAt);
   const comparing = mode === "both";
   const ready = cartoon?.status === "ready";
@@ -97,7 +116,7 @@ function Edition({ requestedDate, today, autoRequested }) {
         <section className={s.lead} aria-labelledby="news-title">
           <div className={s.kicker}><span>01 / 세상의 하루</span><span>{date === today ? "오늘의 대표 뉴스" : "이날의 대표 뉴스"}</span></div>
           <h2 id="news-title">{cartoon?.headline || (loading ? "이날의 이야기를 불러오는 중" : pending(cartoon) || posting ? "이날을 담을 한 장면을 찾고 있어요" : "하루를 읽는 또 하나의 시선")}</h2>
-          {!ready && <p className={s.leadNote}>{date === today ? "오늘은 저녁 7시 이후, 선정 시각까지 나온 보도에서 대표 뉴스 한 가지를 골라요." : "선택한 날짜에 나온 보도를 한국 시간 하루 기준으로 살펴 대표 뉴스 한 가지를 만평으로 풀어내요."}</p>}
+          {!ready && <p className={s.leadNote}>{date === today ? "오늘은 밤 10시 이후, 저녁 뉴스의 선두 기사에서 대표 사건을 골라요." : "선택한 날짜에 나온 보도 중 저녁 뉴스의 선두 기사를 살펴 대표 사건을 골라요."} 같은 사건을 독립 매체 두 곳 이상에서 확인하고, 근거가 부족하면 다른 기사로 대신 채우지 않아요.</p>}
           {primarySource && <a className={s.primarySource} href={primarySource.href} target="_blank" rel="noopener noreferrer"><span>{primarySource.publisher || "대표 출처"}{timestamp(primarySource.publishedAt) && ` · ${timestamp(primarySource.publishedAt)}`}</span><strong>원문 보기 ↗</strong></a>}
         </section>
 
@@ -142,7 +161,10 @@ function Edition({ requestedDate, today, autoRequested }) {
         {sources.length > 0 && <section className={s.sources} aria-labelledby="sources-title">
           <h3 id="sources-title">원문으로 더 읽기<span>{sources.length}개 출처</span></h3>
           <ol>{sources.map((source, index) => <li key={`${source.href}-${index}`}>
-            <a href={source.href} target="_blank" rel="noopener noreferrer"><span className={s.sourceMeta}>{source.publisher || "원문 보도"}{timestamp(source.publishedAt) && <> · {timestamp(source.publishedAt)}</>}</span><span className={s.sourceTitle}>{source.title}<span aria-hidden="true">↗</span></span></a>
+            <div className={s.sourceContent}>
+              <a href={source.href} target="_blank" rel="noopener noreferrer"><span className={s.sourceMeta}>{source.publisher || "원문 보도"}{timestamp(source.publishedAt) && <> · {timestamp(source.publishedAt)}</>}</span><span className={s.sourceTitle}>{source.title}<span aria-hidden="true">↗</span></span></a>
+              {source.broadcast && <a className={s.prominence} href={source.broadcast.url} target="_blank" rel="noopener noreferrer"><span>방송 선두 배치 확인 ↗</span><span>{source.broadcast.label}</span></a>}
+            </div>
           </li>)}</ol>
         </section>}
 
@@ -162,9 +184,9 @@ function CartoonStatus({ cartoon, loading, posting, enabled, beforeAvailable, is
   if (loading) { title = "지면을 펼치고 있어요"; detail = "잠시만 기다려 주세요."; }
   else if (working) { title = drawing ? "만평 한 장을 그리고 있어요" : "대표 뉴스를 살펴보고 있어요"; detail = "완성되면 이 자리에 보여드릴게요."; }
   else if (cartoon?.status === "failed") { title = exhausted ? "이날의 생성 시도를 모두 사용했어요" : `${isToday ? "오늘" : "이날"}의 만평을 완성하지 못했어요`; detail = exhausted ? "이 날짜는 더 요청할 수 없어요. 다른 날짜의 만평을 펼쳐보세요." : canRequest ? "다시 시도할 수 있어요." : retryAt ? "잠시 뒤 다시 시도할 수 있어요." : cartoon.error || "잠시 후 다시 확인해 주세요."; }
-  else if (cartoon?.status === "unavailable") { title = exhausted ? "이날의 생성 시도를 모두 사용했어요" : "선정할 뉴스를 확인하지 못했어요"; detail = exhausted ? "뉴스를 다시 찾아봤지만 충분한 근거를 확인하지 못했어요. 다른 날짜의 만평을 펼쳐보세요." : canRequest ? "뉴스를 다시 검색해 대표 뉴스를 선정할 수 있어요." : retryAt ? "잠시 뒤 뉴스를 다시 선정할 수 있어요." : cartoon.error || "확인할 수 있는 보도를 찾지 못했어요. 다시 불러와 재선정 가능 여부를 확인해 주세요."; }
+  else if (cartoon?.status === "unavailable") { title = exhausted ? "이날의 생성 시도를 모두 사용했어요" : "선정할 뉴스를 확인하지 못했어요"; detail = exhausted ? "뉴스를 다시 찾아봤지만 충분한 근거를 확인하지 못했어요. 다른 날짜의 만평을 펼쳐보세요." : canRequest ? "방송 선두 기사와 다른 매체의 보도를 다시 확인할 수 있어요. 근거가 부족하면 다른 기사로 대신 채우지 않아요." : retryAt ? "잠시 뒤 뉴스를 다시 선정할 수 있어요." : cartoon.error || "확인할 수 있는 보도를 찾지 못했어요. 다시 불러와 재선정 가능 여부를 확인해 주세요."; }
   else if (!enabled) { title = "하루만평을 준비하고 있어요"; detail = "새로운 지면이 열리면 이곳에서 만나요."; }
-  else if (isToday && beforeAvailable) { title = "저녁 7시 이후에 만나요"; detail = "하루의 보도가 모이면 오늘의 대표 뉴스와 만평을 준비해요."; }
+  else if (isToday && beforeAvailable) { title = "밤 10시 이후에 만나요"; detail = "저녁 주요 보도가 모이면 선두 기사와 독립 매체의 보도를 확인해 오늘의 만평을 준비해요."; }
   else if (isToday) { title = "오늘의 지면을 준비해요"; detail = "대표 뉴스 한 가지를 골라 모두가 함께 볼 만평을 만들어요."; }
   else if (canRequest) { title = "이날의 만평을 만들어 보세요"; detail = "버튼을 누르면 선택한 날짜의 보도에서 대표 뉴스를 찾아 만평을 만들어요."; }
   return <div className={`${s.emptyPicture} ${working ? s.working : ""}`} role="status" aria-live="polite">

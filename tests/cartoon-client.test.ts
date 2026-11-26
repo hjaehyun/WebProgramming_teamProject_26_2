@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createEditionSession } from "../src/lib/cartoon-client";
 
 const today = "2026-11-25", yesterday = "2026-11-24";
-const now = new Date("2026-11-25T10:10:00Z"); // 19:10 KST
+const now = new Date("2026-11-25T13:10:00Z"); // 22:10 KST
 const fetchMock = vi.fn<typeof fetch>();
 class PageVisibility extends EventTarget { hidden = false; }
 let page: PageVisibility;
@@ -12,7 +12,7 @@ function snapshot(status: string | null = null, options: Record<string, unknown>
   return {
     cartoon: status ? { date: today, status, stage: "searching", retryAt: null } : null,
     today, dates: [today, yesterday], enabled: true, canRequest: false,
-    availableAt: `${today}T19:00:00+09:00`, ...options,
+    availableAt: `${today}T22:00:00+09:00`, ...options,
   };
 }
 function response(data: unknown, status = 200) {
@@ -180,7 +180,7 @@ describe("daily cartoon hook request lifecycle", () => {
   });
 
   test("a publication-time read failure retries status before starting the newly eligible edition", async () => {
-    vi.setSystemTime(new Date("2026-11-25T09:59:58Z"));
+    vi.setSystemTime(new Date("2026-11-25T12:59:58Z"));
     fetchMock.mockResolvedValueOnce(response(snapshot()))
       .mockRejectedValueOnce(new TypeError("connection lost"))
       .mockResolvedValueOnce(response(snapshot(null, { canRequest: true })))
@@ -453,7 +453,7 @@ describe("daily cartoon hook request lifecycle", () => {
   });
 
   test("before publication time it waits for availableAt and checks permission before starting", async () => {
-    vi.setSystemTime(new Date("2026-11-25T09:59:58Z"));
+    vi.setSystemTime(new Date("2026-11-25T12:59:58Z"));
     fetchMock.mockResolvedValueOnce(response(snapshot()))
       .mockResolvedValueOnce(response(snapshot(null, { canRequest: true })))
       .mockResolvedValueOnce(response(snapshot("ready")));

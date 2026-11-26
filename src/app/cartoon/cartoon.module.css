@@ -91,7 +91,12 @@
 .sources ol { margin: 0; padding: 0; list-style: none; counter-reset: sources; }
 .sources li { display: flex; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--paper-line); counter-increment: sources; }
 .sources li::before { content: "0" counter(sources); color: #998D77; padding-top: 2px; font: 13px Georgia, serif; }
-.sources a { flex: 1; min-width: 0; text-decoration: none; color: var(--paper-ink); }
+.sourceContent { flex: 1; min-width: 0; }
+.sources a { display: block; min-width: 0; text-decoration: none; color: var(--paper-ink); }
+.sources .prominence { margin-top: 9px; padding: 8px 10px; border: 1px solid var(--paper-line); background: #F3EFE5; color: #78513F; font-size: 10px; line-height: 1.7; overflow-wrap: anywhere; }
+.prominence span { display: block; }
+.prominence span:first-child { font-weight: 700; }
+.prominence:hover, .prominence:focus-visible { text-decoration: underline; }
 .sourceMeta { display: block; margin-bottom: 5px; color: #807766; font-size: 10px; line-height: 1.5; }
 .sourceTitle { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 12px; line-height: 1.8; word-break: keep-all; overflow-wrap: anywhere; }
 .sourceTitle > span { color: #8D3D2D; flex-shrink: 0; }
