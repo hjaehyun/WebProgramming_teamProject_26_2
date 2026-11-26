@@ -152,7 +152,7 @@ function Me() {
           </Link>
         </nav>
 
-        <section className={s.list} aria-label="계정">
+        <section className={`${s.list} ${s.account}`} aria-label="계정">
           {!social && (
             <button
               className={s.row}

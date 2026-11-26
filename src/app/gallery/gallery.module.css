@@ -61,3 +61,24 @@
 .connection > span:nth-child(2) > span { color: #7b859b; font-size: 11px; line-height: 1.6; }
 .connection > svg { flex-shrink: 0; }
 .connection:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.calendarPanel, .discoveryPanel { display: contents; }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .main { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(250px, 1fr); gap: 28px; align-items: start; padding: 32px; }
+  :global([data-layout="desktop"]) .calendarPanel, :global([data-layout="desktop"]) .discoveryPanel { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+  :global([data-layout="desktop"]) .monthHead, :global([data-layout="desktop"]) .monthControls, :global([data-layout="desktop"]) .stats, :global([data-layout="desktop"]) .calendarHint { padding-left: 0; padding-right: 0; }
+  :global([data-layout="desktop"]) .monthHead h1 { font-size: 40px; }
+  :global([data-layout="desktop"]) .monthControls { max-width: 360px; }
+  :global([data-layout="desktop"]) .stats { font-size: 14px; }
+  :global([data-layout="desktop"]) .calendarHint { font-size: 12px; }
+  :global([data-layout="desktop"]) .grid { gap: 7px; padding: 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
+  :global([data-layout="desktop"]) .wd { height: 32px; font-size: 12px; }
+  :global([data-layout="desktop"]) .dnum, :global([data-layout="desktop"]) .dayNumber, :global([data-layout="desktop"]) .todayNum, :global([data-layout="desktop"]) .future { font-size: 12px; }
+  :global([data-layout="desktop"]) .dayNote, :global([data-layout="desktop"]) .today { font-size: 11px; }
+  :global([data-layout="desktop"]) .empty .dayNote { font-size: 20px; }
+  :global([data-layout="desktop"]) .curator, :global([data-layout="desktop"]) .cartoon, :global([data-layout="desktop"]) .connection { min-height: 88px; padding: 18px; }
+  :global([data-layout="desktop"]) .recent { gap: 16px; padding-top: 8px; }
+  :global([data-layout="desktop"]) .recent h2 { padding: 0; font-size: 17px; }
+  :global([data-layout="desktop"]) .recentGrid { gap: 16px; }
+}

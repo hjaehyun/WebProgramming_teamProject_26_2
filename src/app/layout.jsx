@@ -1,6 +1,8 @@
 import { Gaegu, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
+import "./desktop.css";
 import { StoreProvider } from "@/lib/store";
+import ViewLayout from "@/components/ViewLayout";
 
 // next/font downloads the font files at build time and serves them from this site, so a visitor's
 // browser never contacts Google's font servers. The privacy policy relies on this: do not add a
@@ -23,7 +25,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ko" className={`${sans.variable} ${hand.variable}`}>
       <body>
-        <StoreProvider>{children}</StoreProvider>
+        <StoreProvider><ViewLayout>{children}</ViewLayout></StoreProvider>
       </body>
     </html>
   );

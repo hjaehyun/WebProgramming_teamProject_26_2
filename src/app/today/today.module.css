@@ -65,3 +65,35 @@
 .input:disabled { opacity: .55; }
 .send { width: 44px; height: 44px; flex-shrink: 0; border: 0; border-radius: 22px; background: var(--accent); color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .15s; }
 .send:disabled { background: var(--line-2); cursor: default; }
+
+/* These wrappers leave the existing phone layout intact. */
+.journal, .outcome { display: contents; }
+.desktopNote { display: none; }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .head { padding: 28px 32px 20px; }
+  :global([data-layout="desktop"]) .headText { gap: 8px; }
+  :global([data-layout="desktop"]) .headText h1 { font-size: 40px; }
+  :global([data-layout="desktop"]) .feed { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr); align-items: start; gap: 28px; padding: 24px 32px 32px; }
+  :global([data-layout="desktop"]) .journal { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  :global([data-layout="desktop"]) .outcome { min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
+  :global([data-layout="desktop"]) .desktopNote { display: flex; flex-direction: column; gap: 12px; }
+  :global([data-layout="desktop"]) .desktopNote h2 { margin: 0; font-size: 31px; line-height: 1.25; }
+  :global([data-layout="desktop"]) .desktopNote p { margin: 0; font-size: 13px; line-height: 1.8; color: var(--muted); word-break: keep-all; }
+  :global([data-layout="desktop"]) .daySummary { display: flex; align-items: baseline; gap: 10px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  :global([data-layout="desktop"]) .daySummary strong { font-size: 32px; color: var(--accent); }
+  :global([data-layout="desktop"]) .bubble { max-width: 420px; font-size: 23px; padding: 12px 18px; }
+  :global([data-layout="desktop"]) .line { min-width: 0; }
+  :global([data-layout="desktop"]) .empty { margin: 64px 12px; }
+  :global([data-layout="desktop"]) .empty div { font-size: 32px; }
+  :global([data-layout="desktop"]) .empty p { font-size: 14px; line-height: 1.8; }
+  :global([data-layout="desktop"]) .result, :global([data-layout="desktop"]) .drawing { margin-top: 0; }
+  :global([data-layout="desktop"]) .resultText { flex-wrap: wrap; gap: 8px; font-size: 13px; }
+  :global([data-layout="desktop"]) .outcome > button { height: auto; min-height: 48px; padding: 10px 14px; font-size: 13px; line-height: 1.6; }
+  :global([data-layout="desktop"]) .closeBar { padding: 12px 32px; }
+  :global([data-layout="desktop"]) .closeBar button { height: 40px; }
+  :global([data-layout="desktop"]) .composer { padding: 16px 16px 4px; }
+  :global([data-layout="desktop"]) .chips { gap: 8px; padding-bottom: 12px; }
+  :global([data-layout="desktop"]) .input { height: 52px; }
+  :global([data-layout="desktop"]) .send { width: 52px; height: 52px; border-radius: 26px; }
+}

@@ -27,7 +27,7 @@ export default function AccountRecovery({ reset = false }) {
   }
   return <div className="app">
     <TopBar title={reset ? "새 비밀번호 설정" : "비밀번호 찾기"} back="/" />
-    <main className="scroll" style={{ padding: 24 }}>
+    <main className="scroll account-recovery" style={{ padding: 24 }}>
       <form onSubmit={submit} style={{ display: "grid", gap: 20 }}>
         {reset ? <>
           <label className="field">새 비밀번호<input className="input" type="password" required minLength={8} maxLength={128} autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} /></label>

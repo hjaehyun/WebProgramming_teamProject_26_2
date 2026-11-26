@@ -10,7 +10,13 @@
 .signup { display: flex; justify-content: center; gap: 6px; font-size: 14px; color: var(--muted); }
 .signup button { border: 0; padding: 0; background: none; font: inherit; font-weight: 700; color: var(--accent-ink); cursor: pointer; }
 .error { margin: 0; font-size: 13px; color: #B5483A; }
-.success { margin: 0; font-size: 13px; line-height: 1.5; color: var(--accent-ink); }
+.confirmation { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--accent-tint); }
+.confirmationMessage { display: grid; gap: 8px; font-size: 13px; line-height: 1.6; color: var(--ink-2); }
+.confirmationMessage strong { font-size: 15px; color: var(--ink); }
+.confirmationMessage p { margin: 0; }
+.confirmationActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.confirmationActions > * { flex: 1 1 130px; min-height: 44px; padding: 10px 12px; font-size: 13px; text-align: center; text-decoration: none; }
+.confirmationActions > *:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .notice { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .or { display: flex; align-items: center; gap: 10px; margin: 4px 0; font-size: 12px; color: var(--muted); }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line, #E5DFD3); }
@@ -19,3 +25,16 @@
 .google { background: #FFFFFF; color: #1F1F1F; border: 1px solid #747775; }
 .legal { margin: 4px 0 0; text-align: center; font-size: 11px; line-height: 1.5; color: var(--faint, var(--muted)); }
 .legal a { color: var(--muted); text-decoration: underline; }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .wrap {
+    display: grid; grid-template-columns: minmax(240px, 1fr) minmax(300px, 400px);
+    gap: clamp(32px, 5vw, 96px); align-items: center; padding: 48px clamp(32px, 4vw, 72px);
+  }
+  :global([data-layout="desktop"]) .hero { min-height: 420px; gap: 40px; }
+  :global([data-layout="desktop"]) .logo { width: 180px; gap: 9px; }
+  :global([data-layout="desktop"]) .tile { height: 56px; border-radius: 12px; }
+  :global([data-layout="desktop"]) .copy h1 { font-size: 72px; }
+  :global([data-layout="desktop"]) .copy p { font-size: 18px; line-height: 1.8; }
+  :global([data-layout="desktop"]) .form { padding: 28px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); gap: 16px; }
+}

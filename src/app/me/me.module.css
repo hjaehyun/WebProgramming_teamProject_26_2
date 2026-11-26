@@ -41,3 +41,23 @@
 .dangerActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dangerBtn { background: var(--danger); }
 .dangerBtn:hover { background: #8E1E18; }
+
+@media (min-width: 1024px) {
+  :global([data-layout="desktop"]) .main { width: 100%; max-width: 1120px; margin: 0 auto; padding: 24px 32px 40px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; align-items: start; gap: 24px; }
+  :global([data-layout="desktop"]) .main > [role="alert"] { grid-column: 1 / -1; }
+  :global([data-layout="desktop"]) .hero { grid-column: 1 / -1; padding: 8px 0 16px; gap: 20px; }
+  :global([data-layout="desktop"]) .avatar { width: 80px; height: 80px; border-radius: 40px; font-size: 42px; }
+  :global([data-layout="desktop"]) .who { gap: 5px; }
+  :global([data-layout="desktop"]) .who strong { font-size: 36px; }
+  :global([data-layout="desktop"]) .edit { height: 42px; padding: 0 18px; border-radius: 21px; }
+  :global([data-layout="desktop"]) .stats { height: 112px; align-items: center; }
+  :global([data-layout="desktop"]) .stats strong { font-size: 32px; }
+  :global([data-layout="desktop"]) .styleCard { min-height: 112px; padding: 18px; flex-wrap: wrap; }
+  :global([data-layout="desktop"]) .styleText { flex-basis: 140px; }
+  :global([data-layout="desktop"]) .list { min-width: 0; }
+  :global([data-layout="desktop"]) .row { min-height: 60px; padding-left: 20px; }
+  :global([data-layout="desktop"]) .meta { font-size: 12px; }
+  :global([data-layout="desktop"]) .account { grid-column: 2; }
+  :global([data-layout="desktop"]) .danger { grid-column: 2; margin-top: -12px; }
+  :global([data-layout="desktop"]) .form { padding: 8px 20px 20px; }
+}

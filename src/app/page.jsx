@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { finishAuthentication } from "@/lib/auth-flow";
 import s from "./login.module.css";
@@ -27,6 +27,7 @@ function LoginForm() {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const passwordInput = useRef(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
   const [confirmationSent, setConfirmationSent] = useState(false);
@@ -106,6 +107,7 @@ function LoginForm() {
           <label className="field">
             비밀번호
             <input
+              ref={passwordInput}
               className="input"
               type="password"
               placeholder="8자 이상"
@@ -118,9 +120,19 @@ function LoginForm() {
           </label>
           {!signup && <Link href="/forgot-password">비밀번호를 잊으셨나요?</Link>}
           {confirmationSent && (
-            <p className={s.success} role="status">
-              인증 메일을 확인해 주세요. 가입 가능한 주소라면 메일을 보냈어요. 이미 가입했다면 로그인해 주세요.
-            </p>
+            <div className={s.confirmation}>
+              <div className={s.confirmationMessage} role="status">
+                <strong>가입 요청을 확인했어요.</strong>
+                <p>새로 가입하는 주소라면 인증 메일을 확인해 주세요.</p>
+                <p>이미 인증을 완료한 계정에는 가입 인증 메일이 다시 발송되지 않아요. 로그인하거나 비밀번호를 재설정해 주세요.</p>
+              </div>
+              <div className={s.confirmationActions} role="group" aria-label="기존 계정으로 계속하기">
+                <button className="btn" type="button" disabled={busy} onClick={() => { switchMode(); passwordInput.current?.focus(); }}>
+                  로그인하기
+                </button>
+                <Link className="btn ghost" href="/forgot-password">비밀번호 재설정</Link>
+              </div>
+            </div>
           )}
           {shownMessage && (
             <p className={s.error} role="alert">

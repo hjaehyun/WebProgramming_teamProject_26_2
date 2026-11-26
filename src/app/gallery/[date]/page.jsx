@@ -223,6 +223,7 @@ function Detail({ date, today }) {
       </TopBar>
 
       <main className={`scroll ${s.main}`}>
+        <div className={s.artColumn}>
         {art ? <>
         <figure className={s.figure} aria-busy={redrawing}>
           <Framed frame={art.frame} date={date} summary={art.summary} weathers={dayWeathers(art.entries)} basicClassName={s.frame}>
@@ -264,7 +265,9 @@ function Detail({ date, today }) {
           <p>{redrawing ? "조각을 모아 한 장면으로 그려드릴게요." : "조각글을 남기고, 원할 때 한 장의 그림으로 완성해 보세요."}</p>
           {!redrawing && <small>그림이 없어도 조각글은 그대로 저장돼요.</small>}
         </section>}
+        </div>
 
+        <div className={s.journalColumn}>
         <Link href={`/cartoon?date=${encodeURIComponent(date)}`} className={s.cartoonLink}>
           <span><small>같은 날, 다른 시선</small><strong>이날의 만평과 나란히 보기</strong></span><IconNext />
         </Link>
@@ -364,6 +367,7 @@ function Detail({ date, today }) {
             </div>
           )}
         </section>
+        </div>
       </main>
 
       <div className={`bar ${s.actions}`}>
