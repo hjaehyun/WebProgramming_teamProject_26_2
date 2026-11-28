@@ -92,6 +92,8 @@ Cron 호출 URL은 `https://harujogak-hihellow18.vercel.app/api/jobs` 그대로�
 
 **`20261125090000_artwork_frames_anime.sql`(그림별 액자, 애니 풍경 그림체)도 먼저 적용한 뒤 코드를 배포합니다.** 새 코드는 `daily_artworks.frame`을 읽으므로 코드가 먼저 나가면 `/api/me`·그림 조회·공개 전시가 실패합니다. 이 파일은 `frame` 칸(기본 `basic`, 6종 검사)과 본인 그림의 액자만 바꾸는 `set_artwork_frame(date,text)`를 추가하고, `profiles_art_style_check`에 `anime`를 더합니다. 기존 그림은 모두 `basic`이 되어 지금과 똑같이 보이며 다른 행은 바꾸지 않습니다. 적용 확인은 `information_schema.columns`의 `daily_artworks.frame`과 `pg_proc`의 `set_artwork_frame`으로 합니다. `anime` 그림체의 운영 생성은 아직 확인하지 않았습니다.
 
+**`20261128090000_trash.sql`(휴지통)은 적용한 직후 바로 코드를 배포합니다.** 순서가 어긋나면 그 사이에 지운 그림이 망가집니다. 코드가 먼저 나가면 휴지통 화면이 실패하고, 옛 `remove_team_entry`가 그림 행을 바로 지우는데 새 코드는 파일을 지우지 않아 파일만 남습니다. 마이그레이션만 먼저 적용된 채 옛 코드가 오래 돌면, 새 RPC가 그림을 휴지통에 넣은 직후 옛 코드가 그 그림 파일을 지워서 나중에 되살린 그림이 "그림을 불러오지 못했어요"로 보입니다. 이 파일은 `trashed_entries`·`trashed_artworks` 표(본인 select만, 쓰기는 RPC·작업 처리기만), `restore_trash_item`·`purge_trash_item`·`empty_trash` RPC를 추가하고 `remove_team_entry`를 같은 시그니처로 바꿔 지우기 전에 휴지통으로 옮깁니다. 기존 행은 바꾸지 않습니다. 적용 확인은 `to_regclass('public.trashed_entries')`·`to_regclass('public.trashed_artworks')`와 `pg_proc`의 `restore_trash_item`으로 합니다.
+
 새 worker는 `crayon`·`story`를 포함한 그림체를 지원하며, 운영에서 크레파스 재생성·동화책 자동 생성·색연필 생성과 PNG 다운로드를 실제 확인했습니다. 만료 선점 복구는 과거 날짜 시험 자료와 의도적으로 오래된 선점을 사용했으며, 실제 자정 통과·프로세스 강제 종료 시험은 아닙니다. 이전 배포로 복구할 때는 현재 DB와 새 그림체에 대한 호환성을 함께 확인합니다.
 
 ## 인증과 메일
@@ -135,7 +137,11 @@ JSON 변경 요청은 `Content-Type: application/json`과 동일 origin을 사�
 | `DELETE /api/me` | 이메일 `{password}`, 소셜 `{confirm:"탈퇴"}` | 정리 완료 시 `{ok:true}` |
 | `POST /api/me/entries` | `{date,entry:{id,text}}` | `{entry:Entry}`; `id`는 UUID. `date`는 오늘 또는 그림이 있는 지난 날 |
 | `PATCH /api/me/entries/[id]` | `{text}` | `{ok:true}` |
-| `DELETE /api/me/entries/[id]` | 본문 없음 | `{ok:true,artworkRemoved}`; 그림 있는 날의 마지막 조각글이면 그림도 삭제 |
+| `DELETE /api/me/entries/[id]` | 본문 없음 | `{ok:true,artworkRemoved}`; 조각글은 휴지통으로. 그림 있는 날의 마지막 조각글이면 그림도 함께 휴지통으로 |
+| `GET /api/me/trash` | 없음 | `{items:[{id,kind:"entry",date,text,deletedAt,purgeAt}\|{id,kind:"artwork",date,entries,imageUrl,frame,scene,deletedAt,purgeAt}]}`; 최신순 |
+| `POST /api/me/trash/[id]/restore` | 본문 없음 | `{ok:true,restored:"entry"\|"artwork"\|"entry_only",date}`; 그리는 중·30개 초과·다른 그림만 남은 경우 `409` |
+| `DELETE /api/me/trash/[id]` | 본문 없음 | `{ok:true}`; 그림은 파일을 먼저 지움(실패 시 `503`, 행은 남음) |
+| `DELETE /api/me/trash` | 본문 없음 | `{ok:true,removed}`; 목록에 있던 항목까지만 비움 |
 | `POST /api/artworks` | `{date,redraw?,requestId}` | `{artwork:Artwork}`; UUID `requestId` 필수 |
 | `GET /api/artworks/[date]` | 없음 | `{artwork:Artwork}` |
 | `PUT /api/me/artworks/[date]/frame` | `{frame}` | `{ok:true,frame}`; `basic`·`diary`·`polaroid`·`wood`·`tape`·`sketch` 중 하나. 본인 그림이 없는 날은 `404` |
@@ -155,7 +161,9 @@ JSON 변경 요청은 `Content-Type: application/json`과 동일 origin을 사�
 
 조각글은 서울 날짜 기준 오늘, 또는 그림이 이미 있는(`ready`·`failed`) 지난 날에 작성·수정·삭제합니다. 그림을 그리는 중(`queued`·`processing`)인 날, 그림 없는 지난 날, 미래 날짜는 거부합니다. 1~500자·하루 30개 제한도 DB에서 검사합니다. 작성 시각은 서버 값을 사용하고 클라이언트의 사용자 ID·위치·시각을 신뢰하지 않으므로, 지난 날에 더한 조각글의 `at`은 더한 날의 시각이며 화면은 "M/D 더함"으로 표시합니다. 날씨는 오늘 조각글에만 붙습니다. 프론트는 저장·수정·삭제의 진행을 기다린 뒤 그림 생성을 요청합니다. 저장이 실패한 채 그림 생성을 성공으로 진행하지 않습니다.
 
-그림이 있는 날의 조각글을 바꿔도 그림은 자동으로 다시 그리지 않습니다. `Artwork.entriesChanged`가 그림을 그린 조각글과 지금 조각글의 차이(글 내용 기준)를 알리고, 갤러리 상세에서 "다시 그리기"를 누르면 그 시점의 조각글을 다시 읽어 그립니다(남은 시도 안에서). 실패한 그림을 재시도할 때도 조각글이 바뀌었으면 저장된 프롬프트를 버리고 다시 요약합니다. 마지막 조각글을 지우면 그 날 그림과 전시 항목·노래 연결이 함께 삭제되고, 서버가 해당 그림의 Storage 폴더를 지웁니다(실패해도 응답은 성공, 탈퇴 정리 때 다시 지움). 그 날의 사용한 시도 횟수는 `deleted_artwork_attempts`에 남아, 오늘 다시 써서 마감해도 3회 한도를 넘지 않습니다.
+그림이 있는 날의 조각글을 바꿔도 그림은 자동으로 다시 그리지 않습니다. `Artwork.entriesChanged`가 그림을 그린 조각글과 지금 조각글의 차이(글 내용 기준)를 알리고, 갤러리 상세에서 "다시 그리기"를 누르면 그 시점의 조각글을 다시 읽어 그립니다(남은 시도 안에서). 실패한 그림을 재시도할 때도 조각글이 바뀌었으면 저장된 프롬프트를 버리고 다시 요약합니다. 마지막 조각글을 지우면 그 날 그림이 그 조각글과 한 묶음으로 휴지통에 들어가고, 전시 항목·노래 연결·하루연결은 지금처럼 사라집니다. 그 날의 사용한 시도 횟수는 `deleted_artwork_attempts`에 남아, 오늘 다시 써서 마감해도 3회 한도를 넘지 않습니다.
+
+**휴지통.** 지운 조각글과 함께 지워진 그림은 원래 표에서 빠져 `trashed_entries`·`trashed_artworks`에 원래 행(jsonb) 그대로 30일 보관됩니다. 원래 표만 읽는 그림 생성·하루연결·하루만평·큐레이터·공개 전시는 휴지통 항목을 보지 않습니다. 그림 파일은 휴지통에 있는 동안 Storage에 남습니다. 복원은 원래 id·작성 시각·날씨·액자·시도 횟수를 그대로 되살립니다. 그 날짜에 이미 다른 그림이 있으면 묶음을 복원해도 조각글만 돌아오고(`entry_only`) 기존 그림은 바뀌지 않으며, 휴지통 그림은 그 날 그림이 없고 조각글이 있을 때만 되살릴 수 있습니다. 그리는 중인 날과 30개를 넘게 되는 복원은 거부합니다. 복원한 그림의 전시·노래는 다시 걸어야 합니다. 같은 id로 다시 저장한 조각글을 또 지우면 휴지통의 예전 사본을 새 사본으로 바꿉니다. 휴지통 그림이 있는 날의 조각글을 되살리면 그날의 가장 최근 휴지통 그림도 함께 되살립니다(그대로 두면 자동 마감이 새 그림을 그려 원래 그림을 되살릴 수 없게 되기 때문). 그림이 없던 지난 날의 조각글을 되살리면 지우기 전처럼 자동 마감 대상이 될 수 있습니다. 완전 삭제·비우기는 서버가 그림 파일을 먼저 지운 뒤 행을 지웁니다. 30일 지난 항목은 매일 도는 Vercel cron(`/api/cartoon-jobs`, 13:00 UTC)이 모두 정리하고, 그림 작업 처리기(`/api/jobs`, 그릴 그림이 있을 때만 호출됨)도 실행마다 최대 20개 그림씩 정리합니다. 파일 삭제가 실패하면 다음 실행에 다시 시도합니다. 탈퇴는 사용자 폴더 전체와 함께 휴지통 행도 삭제합니다.
 
 그림 `status`는 `queued → processing → ready` 또는 `failed`입니다. 화면용 `phase`는 처리 중 `summarizing`·`drawing`을 구분합니다. `202`는 대기·처리 중이며, `200`에도 `failed`가 올 수 있으므로 **HTTP 성공만으로 그림 완성을 판단하지 않습니다.** 네트워크·서버 응답 유실 시 같은 날짜를 조회하되 `requestId`가 일치하는 결과만 이번 요청으로 해석합니다. 명시적인 `4xx` 오류를 과거 그림으로 덮지 않습니다.
 

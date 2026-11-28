@@ -1,0 +1,29 @@
+.main { padding: 8px 16px 32px; display: flex; flex-direction: column; gap: 14px; }
+.intro { margin: 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.note { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--accent-tint); color: var(--accent-ink); font-size: 13px; line-height: 1.5; }
+.error { margin: 0; font-size: 13px; color: var(--danger); }
+
+.empty { padding: 36px 16px; border: 1px dashed var(--line-2); border-radius: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.empty strong { font-size: 15px; }
+.empty span { font-size: 13px; color: var(--muted); }
+
+.head { display: flex; align-items: center; justify-content: space-between; }
+.head h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.emptyBtn { border: 0; background: none; padding: 6px 4px; font: inherit; font-size: 13px; font-weight: 500; color: var(--danger); cursor: pointer; }
+.emptyBtn:disabled { color: var(--faint); cursor: default; }
+
+.list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.item { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px 12px; padding: 14px 16px; }
+.withThumb { grid-template-columns: 72px minmax(0, 1fr); }
+.item + .item { border-top: 1px solid var(--soft); }
+.thumb { width: 72px; border-radius: 10px; overflow: hidden; display: block; grid-row: span 2; align-self: start; }
+.body { min-width: 0; display: flex; flex-direction: column; gap: 4px; grid-column: -2; }
+.body strong { font-size: 14px; }
+.kind { font-size: 12px; color: var(--muted); }
+.text { margin: 0; font-size: 19px; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.days { font-size: 12px; color: var(--faint); }
+.actions { grid-column: -2; display: flex; gap: 8px; }
+.restore { min-height: 34px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 17px; background: var(--accent-soft); color: var(--accent-ink); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.purge { min-height: 34px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 17px; background: var(--surface); color: var(--danger); font: inherit; font-size: 13px; cursor: pointer; }
+.restore:disabled, .purge:disabled { opacity: .6; cursor: default; }
+.restore:focus-visible, .purge:focus-visible, .emptyBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

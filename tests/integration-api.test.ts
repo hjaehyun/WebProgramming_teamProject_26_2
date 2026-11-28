@@ -258,21 +258,16 @@ describe("authenticated API boundaries",()=>{
     f.tables.daily_artworks[0].entry_snapshot=[{content:"예전 기록"}];
     data=await (await me()).json();expect(data.artworks[date].entriesChanged).toBe(true);
   });
-  test("removing a day's last fragment also deletes that picture's files",async()=>{
+  test("removing a day's last fragment sends the picture to the trash and keeps its files",async()=>{
     const remove=()=>entryChange(new Request(origin+`/api/me/entries/${entryId}`,{method:"DELETE",headers:{Origin:origin}}),entryId,true);
     const r=await remove();
     expect(r.status).toBe(200);expect(await r.json()).toEqual({ok:true,artworkRemoved:true});
     expect(f.db.rpc).toHaveBeenCalledWith("remove_team_entry",{p_id:entryId});
-    expect(f.bucket.list).toHaveBeenCalledWith(`${alice}/${artworkId}`,{limit:1000});
-    expect(f.bucket.remove).toHaveBeenCalledWith([`${alice}/${artworkId}/image.png`]);
-    // Another fragment remains: the picture and its files stay.
+    // The picture can still be restored for 30 days, so its files stay in Storage.
+    expect(f.bucket.list).not.toHaveBeenCalledWith(`${alice}/${artworkId}`,expect.anything());
+    expect(f.bucket.remove).not.toHaveBeenCalled();
     vi.clearAllMocks();f.db.rpc.mockResolvedValueOnce({data:null,error:null} as never);
-    expect(await (await remove()).json()).toEqual({ok:true,artworkRemoved:false});expect(f.bucket.list).not.toHaveBeenCalled();
-    // The picture row is already gone, so a storage failure must not turn the removal into an error.
-    const logged=vi.spyOn(console,"error").mockImplementation(()=>{});
-    f.bucket.remove.mockResolvedValue({data:[],error:new Error("Storage temporarily unavailable")});
-    const failed=await remove();expect(failed.status).toBe(200);expect(await failed.json()).toEqual({ok:true,artworkRemoved:true});
-    expect(logged).toHaveBeenCalledWith("Artwork file cleanup deferred",{id:artworkId});logged.mockRestore();
+    expect(await (await remove()).json()).toEqual({ok:true,artworkRemoved:false});expect(f.bucket.remove).not.toHaveBeenCalled();
   });
   test("file cleanup failure keeps the account and exposes a retryable deletion state",async()=>{
     f.bucket.remove.mockResolvedValue({data:[],error:new Error("Storage temporarily unavailable")});

@@ -150,6 +150,11 @@ function Me() {
             <span className={s.meta}>다시 보기</span>
             <IconNext />
           </Link>
+          <Link href="/trash" className={s.row}>
+            <span>휴지통</span>
+            <span className={s.meta}>지운 기록 30일 보관</span>
+            <IconNext />
+          </Link>
         </nav>
 
         <div className={s.account}>
