@@ -181,7 +181,7 @@ function Detail({ date, today }) {
       } catch { /* The store reports the failure and reloads the record. */ }
       return;
     }
-    const ok = confirm("마지막 조각을 지우면 이날 그림도 함께 지워져요.\n전시회에 건 그림이라면 전시에서도 빠지고, 되돌릴 수 없어요. 지울까요?");
+    const ok = confirm("마지막 조각을 지우면 이날 그림도 함께 휴지통으로 가요.\n전시회에 건 그림이라면 전시에서는 빠지고, 30일 안에 마이페이지의 휴지통에서 되살릴 수 있어요. 지울까요?");
     if (!ok) return;
     setRemoving(true);
     try {

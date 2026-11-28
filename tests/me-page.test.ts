@@ -31,4 +31,9 @@ describe("my page", () => {
     const html = renderToStaticMarkup(createElement(MyPage));
     expect(html).toContain('data-testid="bottom-nav"');
   });
+  test("links to the trash, where deleted fragments and pictures wait 30 days", () => {
+    mocks.store.mockReturnValue({ db, signOut: vi.fn(), changePassword: vi.fn(), deleteAccount: vi.fn() });
+    const html = renderToStaticMarkup(createElement(MyPage));
+    expect(html).toMatch(/<a[^>]*href="\/trash"[^>]*>[\s\S]*?휴지통[\s\S]*?<\/a>/);
+  });
 });

@@ -2,7 +2,7 @@ import "server-only";
 import {z} from "zod";
 import {authenticated,body,json,mutation,rpcError,run} from "./request";
 import {dateSchema,entrySchema,seoulDate} from "./core/domain";
-import {adminClient} from "./core/supabase/server";
+import {removeArtworkFolder} from "./artwork-files";
 import {entryView} from "./data";
 import {lookupWeather,readCoords,weatherEnabled} from "./weather";
 export function entryPost(request:Request) { return run(async()=>{
@@ -34,12 +34,12 @@ export function entryChange(request:Request,id:string,remove=false) {return run(
         connectionId=connected.data?.id??null;
       }
     } catch { /* New connection cleanup is best effort; account deletion also walks the user folder. */ }
-    // Removing the last fragment of a day with a picture removes the picture too (returned id).
+    // The fragment goes to the trash; the last fragment of a day takes its picture along (returned
+    // id). The picture's files stay so it can be restored; trash purging removes them.
     const r=await db.rpc("remove_team_entry",{p_id:id});rpcError(r.error);
-    if(r.data) await removeArtworkFiles(user.id,r.data);
     if(connectionId) try {
       const remaining=await db.from("daily_connections").select("id").eq("user_id",user.id).eq("id",connectionId).maybeSingle();
-      if(!remaining.error&&!remaining.data) await removeArtworkFiles(user.id,`connection-${connectionId}`);
+      if(!remaining.error&&!remaining.data) await removeConnectionFiles(user.id,`connection-${connectionId}`);
     } catch { console.warn("Connection file cleanup deferred"); }
     return json({ok:true,artworkRemoved:Boolean(r.data)});
   }
@@ -47,14 +47,9 @@ export function entryChange(request:Request,id:string,remove=false) {return run(
   const r=await db.rpc("edit_entry",{p_id:id,p_content:p.text});
   rpcError(r.error);return json({ok:true});
 });}
-// The picture's row is already gone, so a failure here only leaves unreachable files behind; account
-// deletion removes the whole user folder later. It never fails the response.
-async function removeArtworkFiles(userId:string,artworkId:string) {
-  const folder=`${userId}/${artworkId}`;
-  try {
-    const bucket=adminClient().storage.from("artworks");
-    const listed=await bucket.list(folder,{limit:1000});if(listed.error) throw listed.error;
-    const files=(listed.data??[]).filter(item=>item.id).map(item=>`${folder}/${item.name}`);
-    if(files.length) {const removed=await bucket.remove(files);if(removed.error) throw removed.error;}
-  } catch { console.error("Artwork file cleanup deferred",{id:artworkId}); }
+// The connection's row is already gone, so a failure here only leaves unreachable files behind;
+// account deletion removes the whole user folder later. It never fails the response.
+async function removeConnectionFiles(userId:string,folder:string) {
+  try { await removeArtworkFolder(userId,folder); }
+  catch { console.error("Artwork file cleanup deferred",{id:folder}); }
 }
