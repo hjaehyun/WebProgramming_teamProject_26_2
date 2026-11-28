@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ store: vi.fn() }));
 vi.mock("../src/lib/store", () => ({ useStore: mocks.store }));
-vi.mock("../src/components/ui", () => ({ Screen: ({ children }: React.PropsWithChildren) => children, TopBar: () => null, IconNext: () => null }));
+vi.mock("../src/components/ui", () => ({ Screen: ({ children }: React.PropsWithChildren) => children, TopBar: () => null, IconNext: () => null, BottomNav: () => null }));
 vi.mock("../src/components/Art", () => ({ default: () => null }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ children, href, ...props }: React.PropsWithChildren<{ href: string }>) => createElement("a", { ...props, href }, children) }));
