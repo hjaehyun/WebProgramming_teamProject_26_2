@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Art from "@/components/Art";
-import { IconNext, Screen, TopBar } from "@/components/ui";
+import { BottomNav, IconNext, Screen, TopBar } from "@/components/ui";
 import { addDays, todayKey } from "@/lib/date";
 import { useStore } from "@/lib/store";
 import { styleOf } from "@/lib/styles";
@@ -183,6 +183,7 @@ function Me() {
         </div>
         </div>
       </main>
+      <BottomNav />
     </>
   );
 }
